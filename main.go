@@ -17,10 +17,11 @@ type Todo struct {
 }
 
 var (
-	todos = []Todo{
-		{"Learn Go", false, ""},
-		{"Write a Go web app", false, ""},
-		{"Test the app", false, ""},
+	defaultImage = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images"
+	todos        = []Todo{
+		{"Learn Go", false, defaultImage},
+		{"Write a Go web app", false, defaultImage},
+		{"Test the app", false, defaultImage},
 	}
 	mu sync.Mutex
 	//tmpl = template.Must(template.ParseFiles("templates/todo.html", "templates/todo-item.html"))
@@ -85,6 +86,8 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("Received image!")
+
 	// Parse multipart form data
 	r.ParseMultipartForm(10 << 20) // 10MB limit
 
@@ -115,6 +118,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	index := r.FormValue("index")
 	if idx, err := strconv.Atoi(index); err == nil && idx < len(todos) {
 		todos[idx].ImageUrl = "/" + filePath // Update the ImageUrl field
+		fmt.Printf("Saved image as %v\n", todos[idx].ImageUrl)
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
