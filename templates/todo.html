@@ -1,3 +1,22 @@
+
+{{define "todo-item"}}
+<div hx-target="this" hx-swap="outerHTML" class="p-4 shadow-md rounded-lg flex justify-between items-center {{if .Todo.IsDone}} bg-gray-200 cursor-not-allowed {{else}} bg-white {{end}}">
+    <div class="flex items-center {{if .Todo.IsDone}} opacity-50 {{end}}">
+        <img src="{{.Todo.ImageUrl}}" alt="icon" class="w-8 h-8 mr-4">
+        {{.Todo.Name}}
+    </div>
+    <div class="flex space-x-2">
+        <button {{if .Todo.IsDone}} disabled {{else}} hx-get="/edit/{{.Index}}" {{end}} class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 {{if .Todo.IsDone}} opacity-50 cursor-not-allowed {{end}}">
+            Click To Edit
+        </button>
+        <button hx-get="/reserve/{{.Index}}" hx-vals='{"reserve": {{if .Todo.IsDone}} false {{else}} true {{end}}}' class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-yellow-600">
+            {{if .Todo.IsDone}} Unreserve {{else}} Reserve {{end}}
+        </button>
+    </div>
+</div>
+{{end}}
+
+{{define "all"}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,83 +31,10 @@
         <h1 class="text-3xl font-bold mb-4">Todo List</h1>
         <div class="grid grid-cols-1 gap-4">
             {{range $index, $todo := .}}
-
-                <form hx-post="/toggle" hx-swap="outerHTML" hx-trigger="change" class="bg-white p-4 shadow-md rounded-lg flex justify-between items-center">
-                    <!-- Left: Image next to the checkbox -->
-                    <div class="flex items-center">
-                        <img src="{{$todo.ImageUrl}}" alt="icon" class="w-8 h-8 mr-4">
-                        <label class="flex items-center">
-                            <input type="checkbox" name="checked"
-                                   value="true"
-                                   onchange="this.value = this.checked ? 'true' : 'false'" {{if $todo.IsDone}} checked {{end}}
-                                   class="mr-2">
-                            {{if $todo.IsDone}} <del> {{end}} {{$todo.Name}} {{if $todo.IsDone}} </del> {{end}}
-                        </label>
-                    </div>
-                    <!-- Right: Hidden input and buttons -->
-                    <div class="flex space-x-2">
-                        <input type="hidden" name="index" value="{{$index}}">
-                        <button type="button" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
-                            Edit
-                        </button>
-                        <button type="button" class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">
-                            Reserve
-                        </button>
-                    </div>
-
-                    <input type="file" name="image" id="imageInput" class="mr-4 hidden">
-
-                    <div class="flex space-x-2">
-                        <input type="hidden" name="index" value="{{$index}}">
-                        <button type="button" class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 take-image-btn">
-                            Take Image From Clipboard
-                        </button>
-                        <button type="button" class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">
-                            Edit
-                        </button>
-                    </div>
-                </form>
+                {{template "todo-item" $todo}}
             {{end}}
         </div>
     </div>
-    <script>
-        document.querySelectorAll('.take-image-btn').forEach(button => {
-            button.addEventListener('click', async function () {
-                // Attempt to read from the clipboard
-                try {
-                    const clipboardItems = await navigator.clipboard.read();
-                    for (const clipboardItem of clipboardItems) {
-                        for (const type of clipboardItem.types) {
-                            if (type.startsWith('image/')) {
-                                const blob = await clipboardItem.getType(type);
-
-                                // Create FormData to send the image via POST
-                                const formData = new FormData();
-                                formData.append('image', blob, 'pasted-image.png');
-                                const index = this.closest('form').querySelector('input[name="index"]').value;
-                                formData.append('index', index);
-
-                                // Send the image to the server
-                                const response = await fetch('/upload', {
-                                    method: 'POST',
-                                    body: formData
-                                });
-
-                                // Check if the upload was successful
-                                if (response.ok) {
-                                    window.location.reload(); // Reload to show the new image
-                                } else {
-                                    alert('Error uploading image');
-                                }
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to read from clipboard:', error);
-                    alert('No image found in clipboard');
-                }
-            });
-        });
-    </script>
 </body>
 </html>
+{{end}}

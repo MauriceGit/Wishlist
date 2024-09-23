@@ -1,25 +1,16 @@
 
 
-<form hx-post="/toggle" hx-swap="outerHTML" hx-trigger="change" class="bg-white p-4 shadow-md rounded-lg flex justify-between items-center">
-    <!-- Left: Image next to the checkbox -->
-    <div class="flex items-center">
-        <img src="https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images" alt="icon" class="w-8 h-8 mr-4">
-        <label class="flex items-center">
-            <input type="checkbox" name="checked"
-                   value="true"
-                   onchange="this.value = this.checked ? 'true' : 'false'" {{if .Todo.IsDone}} checked {{end}}
-                   class="mr-2">
-             {{if .Todo.IsDone}} <del> {{end}} {{.Todo.Name}} {{if .Todo.IsDone}} </del> {{end}}
-        </label>
+<div hx-target="this" hx-swap="outerHTML" class="p-4 shadow-md rounded-lg flex justify-between items-center {{if .Todo.IsDone}} bg-gray-200 cursor-not-allowed {{else}} bg-white {{end}}">
+    <div class="flex items-center {{if .Todo.IsDone}} opacity-50 {{end}}">
+        <img src="{{.Todo.ImageUrl}}" alt="icon" class="w-8 h-8 mr-4">
+        {{.Todo.Name}}
     </div>
-    <!-- Right: Hidden input and buttons -->
     <div class="flex space-x-2">
-        <input type="hidden" name="index" value="{{.Index}}">
-        <button type="button" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
-            Edit
+        <button {{if .Todo.IsDone}} disabled {{else}} hx-get="/edit/{{.Index}}" {{end}} class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 {{if .Todo.IsDone}} opacity-50 cursor-not-allowed {{end}}">
+            Click To Edit
         </button>
-        <button type="button" class="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600">
-            Reserve
+        <button hx-get="/reserve/{{.Index}}" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-yellow-600">
+            {{if .Todo.IsDone}} Unreserve {{else}} Reserve {{end}}
         </button>
     </div>
-</form>
+</div>
