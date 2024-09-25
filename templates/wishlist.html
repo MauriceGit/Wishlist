@@ -18,7 +18,7 @@
                 placeholder="Enter description">
         </div>
 
-        <div class="flex justify-end gap-2">
+        <div class="flex justify-end gap-3">
             <!-- OK Button -->
             <button type="submit" class="px-6 py-2 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-50 shadow-md">
                 OK
@@ -27,9 +27,29 @@
             <button type="button" hx-get="/item/{{.Index}}" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
                 Cancel
             </button>
+            <button type="button" hx-delete="/item/{{.Index}}" hx-confirm="Are you sure you wish to delete the wish?" class="px-6 py-2 bg-red-500 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+                Delete
+            </button>
         </div>
     </div>
 </form>
+{{end}}
+
+{{define "plus-button"}}
+<div hx-target="this" hx-swap="outerHTML" class="flex justify-end gap-2">
+    <button hx-get="/new" id="increment-btn"
+        class="flex justify-center items-center w-10 h-10 rounded-full text-white focus:outline-none bg-lime-600 hover:bg-lime-700">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12M6 12h12"></path>
+        </svg>
+    </button>
+</div>
+{{end}}
+
+{{define "new-wish"}}
+{{template "wish-edit" .}}
+{{template "plus-button"}}
 {{end}}
 
 {{define "wish-item"}}
@@ -53,7 +73,6 @@
         </button>
     </div>
 </div>
-
 {{end}}
 
 {{define "all"}}
@@ -64,7 +83,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wishlist</title>
     <script src="https://unpkg.com/htmx.org@1.9.2"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto p-4">
@@ -73,6 +92,7 @@
             {{range $index, $wish := .}}
                 {{template "wish-item" $wish}}
             {{end}}
+            {{template "plus-button"}}
         </div>
     </div>
 </body>

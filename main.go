@@ -31,10 +31,11 @@ var (
 	templateWishlist = template.Must(template.ParseFiles("templates/wishlist.html"))
 )
 
-func parseId(id string) int {
+func parseId(id string, strict bool) int {
 	idx, err := strconv.Atoi(id)
-	if err != nil || idx < 0 || idx >= len(wishlist) {
+	if err != nil || strict && (idx < 0 || idx >= len(wishlist)) {
 		fmt.Printf("Parsing the id '%v' results in err '%v' or an index that is out-of-bounds\n", id, err)
+		return -2
 	}
 	return idx
 }
@@ -59,7 +60,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 // Handler to toggle todo item
 func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"))
+		idx := parseId(r.PathValue("id"), false)
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
@@ -91,8 +92,30 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 
 func itemHandler(w http.ResponseWriter, r *http.Request) {
 
+	// Delete an item!
+	if r.Method == http.MethodDelete {
+		idx := parseId(r.PathValue("id"), false)
+
+		// possibly a cancel on a newly created item. Lets just return nothing instead!
+		if idx == -1 {
+			return
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		wishlist = append(wishlist[:idx], wishlist[idx+1:]...)
+
+		// Return nothing. That should just remove the currently edited item!
+	}
+
 	if r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"))
+		idx := parseId(r.PathValue("id"), false)
+
+		// possibly a cancel on a newly created item. Lets just return nothing instead!
+		if idx == -1 {
+			return
+		}
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -116,7 +139,7 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 func editHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"))
+		idx := parseId(r.PathValue("id"), true)
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -134,10 +157,30 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func newItemHandler(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == http.MethodGet {
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		if r.Header.Get("HX-Request") == "true" {
+			if err := templateWishlist.ExecuteTemplate(w, "new-wish", TemplateWish{
+				Index: -1, // An invalid index so that we generate a new item after the OK-button
+				Wish:  Wish{"", false, ""},
+			}); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
+}
+
 func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
-		idx := parseId(r.PathValue("id"))
+		idx := parseId(r.PathValue("id"), false)
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
@@ -146,6 +189,12 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 		mu.Lock()
 		defer mu.Unlock()
+
+		// A new item was added!
+		if idx == -1 {
+			wishlist = append(wishlist, Wish{"", false, ""})
+			idx = len(wishlist) - 1
+		}
 
 		wishlist[idx].ImageUrl = r.FormValue("imageUrl")
 		wishlist[idx].Description = r.FormValue("description")
@@ -167,6 +216,7 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	http.HandleFunc("/", wishlistHandler)
 	http.HandleFunc("/reserve/{id}", reserveWishHandler)
+	http.HandleFunc("/new", newItemHandler)
 	http.HandleFunc("/item/{id}", itemHandler)
 	http.HandleFunc("/edit/{id}", editHandler)
 	http.HandleFunc("/edit/{id}/done", editDoneHandler)
