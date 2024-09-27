@@ -1,3 +1,25 @@
+{{define "plus-button"}}
+<div hx-target="this" hx-swap="outerHTML" class="flex justify-{{if .Side}}{{.Side}}{{else}}start{{end}} gap-2">
+    <button hx-get="{{.Link}}" id="increment-btn"
+        class="flex justify-center items-center w-10 h-10 rounded-full text-white focus:outline-none {{.Color}} hover:{{.ColorHighlight}}">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12M6 12h12"></path>
+        </svg>
+    </button>
+</div>
+{{end}}
+
+{{define "link"}}
+<input type="text" id="link" name="link" value="{{.}}"
+       class="p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-500"
+       placeholder="Enter Link">
+{{end}}
+
+{{define "add-link"}}
+{{template "link" .Link}}
+{{template "plus-button" .NewLink}}
+{{end}}
 
 {{define "wish-edit"}}
 <form hx-post="/edit/{{.Index}}/done" hx-target="this" hx-swap="outerHTML" class="bg-white p-6 shadow-md rounded-lg">
@@ -23,10 +45,9 @@
         <div class="grid grid-cols-1 gap-1">
             <label for="link" class="mb-1 text-lg font-semibold text-gray-700">Product Links</label>
             {{range $link := .Wish.Links}}
-                <input type="text" id="link" name="link" value="{{$link}}"
-                    class="p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-500"
-                    placeholder="Enter Link">
+                {{template "link" $link}}
             {{end}}
+            {{template "plus-button" .NewLink}}
         </div>
 
         <!-- Image URL Input -->
@@ -54,21 +75,9 @@
 </form>
 {{end}}
 
-{{define "plus-button"}}
-<div hx-target="this" hx-swap="outerHTML" class="flex justify-end gap-2">
-    <button hx-get="{{.Link}}" id="increment-btn"
-        class="flex justify-center items-center w-10 h-10 rounded-full text-white focus:outline-none {{.Color}} hover:{{.ColorHighlight}}">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12M6 12h12"></path>
-        </svg>
-    </button>
-</div>
-{{end}}
-
 {{define "new-wish"}}
-{{template "wish-edit" .}}
-{{template "plus-button" .Button}}
+{{template "wish-edit" .EditWish}}
+{{template "plus-button" .NewWish}}
 {{end}}
 
 {{define "wish-item"}}
@@ -145,7 +154,7 @@
             {{range $index, $wish := .Wishlist}}
                 {{template "wish-item" $wish}}
             {{end}}
-            {{template "plus-button" .Button}}
+            {{template "plus-button" .NewWish}}
         </div>
     </div>
 </body>

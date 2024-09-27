@@ -20,6 +20,8 @@ type Button struct {
 	Link           string
 	Color          string
 	ColorHighlight string
+	// Side can be: "start" or "end" and will determine if the button aligns to left or right (will be used as "justify-{{.Side}}")
+	Side string
 }
 
 type TemplateWish struct {
@@ -27,9 +29,15 @@ type TemplateWish struct {
 	Wish  Wish
 }
 
+type TemplateEditWish struct {
+	Index   int
+	Wish    Wish
+	NewLink Button
+}
+
 type TemplateAll struct {
 	Wishlist []TemplateWish
-	Button   Button
+	NewWish  Button
 }
 
 var (
@@ -60,7 +68,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 
 	data := TemplateAll{
 		Wishlist: make([]TemplateWish, len(wishlist)),
-		Button:   Button{"/new", "bg-lime-600", "bg-lime-700"},
+		NewWish:  Button{"/new", "bg-lime-600", "bg-lime-700", "end"},
 	}
 	for i, t := range wishlist {
 		data.Wishlist[i].Index = i
@@ -149,7 +157,39 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		writeTemplateWish(w, r, "wish-edit", idx)
+		if r.Header.Get("HX-Request") == "true" {
+			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateEditWish{
+				Index:   idx,
+				Wish:    wishlist[idx],
+				NewLink: Button{"/addlink", "bg-blue-300", "bg-blue-400", "start"},
+			}); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
+}
+
+func addLinkHandler(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method == http.MethodGet {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if r.Header.Get("HX-Request") == "true" {
+			if err := templateWishlist.ExecuteTemplate(w, "add-link", struct {
+				Link    string
+				NewLink Button
+			}{
+				Link:    "",
+				NewLink: Button{"/addlink", "bg-blue-300", "bg-blue-400", "start"},
+			}); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
 }
 
@@ -161,13 +201,15 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 		defer mu.Unlock()
 
 		data := struct {
-			Index  int
-			Wish   Wish
-			Button Button
+			EditWish TemplateEditWish
+			NewWish  Button
 		}{
-			Index:  -1, // An invalid index so that we generate a new item after the OK-button
-			Wish:   Wish{"", "", nil, "", false},
-			Button: Button{"/new", "bg-lime-600", "bg-lime-700"},
+			EditWish: TemplateEditWish{
+				Index:   -1, // An invalid index so that we generate a new item after the OK-button
+				Wish:    Wish{"", "", nil, "", false},
+				NewLink: Button{"/addlink", "bg-blue-300", "bg-blue-400", "start"},
+			},
+			NewWish: Button{"/new", "bg-lime-600", "bg-lime-700", "end"},
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
@@ -199,9 +241,17 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			idx = len(wishlist) - 1
 		}
 
+		// filter empty links
+		links := make([]string, 0)
+		for _, l := range r.Form["link"] {
+			if l != "" {
+				links = append(links, l)
+			}
+		}
+
 		wishlist[idx].Name = r.FormValue("name")
 		wishlist[idx].Description = r.FormValue("description")
-		wishlist[idx].Links = r.Form["link"]
+		wishlist[idx].Links = links
 		wishlist[idx].ImageUrl = r.FormValue("imageUrl")
 
 		writeTemplateWish(w, r, "wish-item", idx)
@@ -216,5 +266,6 @@ func main() {
 	http.HandleFunc("/item/{id}", itemHandler)
 	http.HandleFunc("/edit/{id}", editHandler)
 	http.HandleFunc("/edit/{id}/done", editDoneHandler)
+	http.HandleFunc("/addlink", addLinkHandler)
 	http.ListenAndServe(":8080", nil)
 }
