@@ -9,9 +9,17 @@ import (
 )
 
 type Wish struct {
+	Name        string
 	Description string
-	Reserved    bool
+	Links       []string
 	ImageUrl    string
+	Reserved    bool
+}
+
+type Button struct {
+	Link           string
+	Color          string
+	ColorHighlight string
 }
 
 type TemplateWish struct {
@@ -19,12 +27,17 @@ type TemplateWish struct {
 	Wish  Wish
 }
 
+type TemplateAll struct {
+	Wishlist []TemplateWish
+	Button   Button
+}
+
 var (
 	defaultImage = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images"
 	wishlist     = []Wish{
-		{"Eine Reise nach Neuseeland", false, defaultImage},
-		{"Eine Maus, die mich lieb hat!", true, defaultImage},
-		{"Ein liebes Glücksbärchen", false, defaultImage},
+		{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
+		{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
+		{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
 	}
 	mu sync.Mutex
 
@@ -45,16 +58,32 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	data := make([]TemplateWish, len(wishlist))
+	data := TemplateAll{
+		Wishlist: make([]TemplateWish, len(wishlist)),
+		Button:   Button{"/new", "bg-lime-600", "bg-lime-700"},
+	}
 	for i, t := range wishlist {
-		data[i].Index = i
-		data[i].Wish = t
+		data.Wishlist[i].Index = i
+		data.Wishlist[i].Wish = t
 	}
 
 	if err := templateWishlist.ExecuteTemplate(w, "all", data); err != nil {
 		fmt.Println(err)
 	}
 
+}
+
+func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int) {
+	if r.Header.Get("HX-Request") == "true" {
+		if err := templateWishlist.ExecuteTemplate(w, template, TemplateWish{
+			Index: idx,
+			Wish:  wishlist[idx],
+		}); err != nil {
+			fmt.Println(err)
+		}
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // Handler to toggle todo item
@@ -73,19 +102,7 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 		reserve := r.FormValue("reserve") == "true"
 		wishlist[idx].Reserved = reserve
 
-		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "wish-item", struct {
-				Index int
-				Wish  Wish
-			}{
-				Index: idx,
-				Wish:  wishlist[idx],
-			}); err != nil {
-				fmt.Println(err)
-			}
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		writeTemplateWish(w, r, "wish-item", idx)
 	}
 
 }
@@ -97,7 +114,7 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 		idx := parseId(r.PathValue("id"), false)
 
 		// possibly a cancel on a newly created item. Lets just return nothing instead!
-		if idx == -1 {
+		if idx < 0 {
 			return
 		}
 
@@ -120,19 +137,7 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "wish-item", struct {
-				Index int
-				Wish  Wish
-			}{
-				Index: idx,
-				Wish:  wishlist[idx],
-			}); err != nil {
-				fmt.Println(err)
-			}
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		writeTemplateWish(w, r, "wish-item", idx)
 	}
 }
 
@@ -144,16 +149,7 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateWish{
-				Index: idx,
-				Wish:  wishlist[idx],
-			}); err != nil {
-				fmt.Println(err)
-			}
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		writeTemplateWish(w, r, "wish-edit", idx)
 	}
 }
 
@@ -164,11 +160,18 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
+		data := struct {
+			Index  int
+			Wish   Wish
+			Button Button
+		}{
+			Index:  -1, // An invalid index so that we generate a new item after the OK-button
+			Wish:   Wish{"", "", nil, "", false},
+			Button: Button{"/new", "bg-lime-600", "bg-lime-700"},
+		}
+
 		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "new-wish", TemplateWish{
-				Index: -1, // An invalid index so that we generate a new item after the OK-button
-				Wish:  Wish{"", false, ""},
-			}); err != nil {
+			if err := templateWishlist.ExecuteTemplate(w, "new-wish", data); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -192,23 +195,16 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 		// A new item was added!
 		if idx == -1 {
-			wishlist = append(wishlist, Wish{"", false, ""})
+			wishlist = append(wishlist, Wish{"", "", nil, "", false})
 			idx = len(wishlist) - 1
 		}
 
-		wishlist[idx].ImageUrl = r.FormValue("imageUrl")
+		wishlist[idx].Name = r.FormValue("name")
 		wishlist[idx].Description = r.FormValue("description")
+		wishlist[idx].Links = []string{r.FormValue("link")}
+		wishlist[idx].ImageUrl = r.FormValue("imageUrl")
 
-		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "wish-item", TemplateWish{
-				Index: idx,
-				Wish:  wishlist[idx],
-			}); err != nil {
-				fmt.Println(err)
-			}
-			return
-		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		writeTemplateWish(w, r, "wish-item", idx)
 	}
 
 }
