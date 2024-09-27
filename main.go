@@ -201,7 +201,7 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 		wishlist[idx].Name = r.FormValue("name")
 		wishlist[idx].Description = r.FormValue("description")
-		wishlist[idx].Links = []string{r.FormValue("link")}
+		wishlist[idx].Links = r.Form["link"]
 		wishlist[idx].ImageUrl = r.FormValue("imageUrl")
 
 		writeTemplateWish(w, r, "wish-item", idx)
