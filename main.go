@@ -167,7 +167,7 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateEditWish{
 				Index:   idx,
 				Wish:    wishlist[idx],
-				NewLink: Button{"/addlink", "bg-blue-300", "bg-blue-400", "start"},
+				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
 			}); err != nil {
 				fmt.Println(err)
 			}
@@ -189,7 +189,7 @@ func addLinkHandler(w http.ResponseWriter, r *http.Request) {
 				NewLink Button
 			}{
 				Link:    "",
-				NewLink: Button{"/addlink", "bg-blue-300", "bg-blue-400", "start"},
+				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
 			}); err != nil {
 				fmt.Println(err)
 			}
@@ -213,7 +213,7 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 			EditWish: TemplateEditWish{
 				Index:   -1, // An invalid index so that we generate a new item after the OK-button
 				Wish:    Wish{"", "", nil, "", false},
-				NewLink: Button{"/addlink", "bg-blue-300", "bg-blue-400", "start"},
+				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
 			},
 			NewWish: Button{"/new", "bg-lime-600", "bg-lime-700", "end"},
 		}

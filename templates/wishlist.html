@@ -1,7 +1,7 @@
 {{define "plus-button"}}
 <div hx-target="this" hx-swap="outerHTML" class="flex justify-{{if .Side}}{{.Side}}{{else}}start{{end}} gap-2">
     <button hx-get="{{.Link}}" id="increment-btn"
-        class="flex justify-center items-center w-10 h-10 rounded-full text-white focus:outline-none bg-blue-300 hover:bg-blue-400">
+        class="flex justify-center items-center w-10 h-10 rounded-full text-white focus:outline-none {{.Color}} hover:{{.ColorHighlight}}">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
             xmlns="http://www.w3.org/2000/svg">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12M6 12h12"></path>
@@ -60,14 +60,14 @@
 
         <div class="flex justify-end gap-3">
             <!-- OK Button -->
-            <button type="submit" class="px-6 py-2 bg-green-300 text-white rounded-lg font-semibold hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-50 shadow-md">
+            <button type="submit" class="px-6 py-2 bg-lime-600 hover:bg-lime-700 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-50 shadow-md">
                 OK
             </button>
             <!-- Cancel Button -->
-            <button type="button" hx-get="/item/{{.Index}}" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+            <button type="button" hx-get="/item/{{.Index}}" class="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
                 Cancel
             </button>
-            <button type="button" hx-delete="/delete/{{.Index}}" hx-confirm="Are you sure you wish to delete the wish?" class="px-6 py-2 bg-red-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+            <button type="button" hx-delete="/delete/{{.Index}}" hx-confirm="Are you sure you wish to delete the wish?" class="px-6 py-2 bg-red-300 hover:bg-red-400 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
                 Delete
             </button>
         </div>
