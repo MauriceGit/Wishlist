@@ -68,7 +68,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 
 	data := TemplateAll{
 		Wishlist: make([]TemplateWish, len(wishlist)),
-		NewWish:  Button{"/new", "bg-lime-600", "bg-lime-700", "end"},
+		NewWish:  Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
 	}
 	for i, t := range wishlist {
 		data.Wishlist[i].Index = i
@@ -215,7 +215,7 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 				Wish:    Wish{"", "", nil, "", false},
 				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
 			},
-			NewWish: Button{"/new", "bg-lime-600", "bg-lime-700", "end"},
+			NewWish: Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
