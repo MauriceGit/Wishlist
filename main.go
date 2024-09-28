@@ -153,6 +153,9 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), true)
+		if idx < 0 {
+			return
+		}
 
 		mu.Lock()
 		defer mu.Unlock()
