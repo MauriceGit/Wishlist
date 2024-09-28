@@ -67,7 +67,7 @@
             <button type="button" hx-get="/item/{{.Index}}" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
                 Cancel
             </button>
-            <button type="button" hx-delete="/item/{{.Index}}" hx-confirm="Are you sure you wish to delete the wish?" class="px-6 py-2 bg-red-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+            <button type="button" hx-delete="/delete/{{.Index}}" hx-confirm="Are you sure you wish to delete the wish?" class="px-6 py-2 bg-red-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
                 Delete
             </button>
         </div>
@@ -85,17 +85,32 @@
 
     {{if .Wish.ImageUrl}} <img src="{{.Wish.ImageUrl}}" alt="Icon" class="w-8 h-8 mr-4 rounded-lg"> {{end}}
 
-    <div class="flex flex-col items-start {{if .Wish.Reserved}} opacity-50 {{end}} flex-grow pr-5 pl-2">
+    <!-- Add a click event listener with plain JS to toggle the hidden class -->
+    <div onclick="toggleDetails(this)" class="flex flex-col items-start {{if .Wish.Reserved}} opacity-50 {{end}} flex-grow pr-5 pl-2">
         <div class="whitespace-normal font-bold">
             {{.Wish.Name}}
         </div>
-        <div class="whitespace-normal font-light">
-            {{.Wish.Description}}
+
+        <!-- This details section will be shown/hidden on click -->
+        <div class="details hidden">
+            <div class="whitespace-normal font-light">
+                {{.Wish.Description}}
+            </div>
+            <div class="whitespace-normal font-light grid grid-cols-1">
+                {{range $wish := .Wish.Links}}
+                    <a href="{{$wish}}" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">{{$wish}}</a>
+                {{end}}
+            </div>
         </div>
-        <div class="whitespace-normal font-light grid grid-cols-1">
-            {{range $wish := .Wish.Links}}
-                <a href="{{$wish}}" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">{{$wish}}</a>
-            {{end}}
+
+        <!-- This "Description Replacement" section will be visible when .details is hidden -->
+        <div class="description-placeholder flex">
+            <div class="whitespace-normal font-light">
+                {{if le (len .Wish.Description) 50}} {{.Wish.Description}} {{else}} {{slice .Wish.Description 0 50}}... {{end}}
+                {{if or (gt (len .Wish.Description) 50) .Wish.Links}}
+                    <span class="font-bold text-blue-500"> [...]</span>
+                {{end}}
+            </div>
         </div>
     </div>
 
@@ -128,12 +143,24 @@
                 <svg class="w-6 h-6 text-gray-800 dark:text-white fill-lime-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                   <path fill-rule="evenodd" d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm13.707-1.293a1 1 0 0 0-1.414-1.414L11 12.586l-1.793-1.793a1 1 0 0 0-1.414 1.414l2.5 2.5a1 1 0 0 0 1.414 0l4-4Z" clip-rule="evenodd"/>
                 </svg>
-
             </button>
         </div>
     {{end}}
 
 </div>
+
+<script>
+  // This function will toggle the hidden class for both the details and description-placeholder divs
+  function toggleDetails(element) {
+    let details = element.querySelector('.details');
+    let placeholder = element.querySelector('.description-placeholder');
+
+    // Toggle hidden class on both elements
+    details.classList.toggle('hidden');
+    placeholder.classList.toggle('hidden');
+  }
+</script>
+
 {{end}}
 
 {{define "all"}}

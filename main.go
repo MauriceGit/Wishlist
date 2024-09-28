@@ -115,7 +115,7 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func itemHandler(w http.ResponseWriter, r *http.Request) {
+func deleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Delete an item!
 	if r.Method == http.MethodDelete {
@@ -133,6 +133,9 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Return nothing. That should just remove the currently edited item!
 	}
+}
+
+func itemHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), false)
@@ -267,6 +270,7 @@ func main() {
 	http.HandleFunc("/reserve/{id}", reserveWishHandler)
 	http.HandleFunc("/new", newItemHandler)
 	http.HandleFunc("/item/{id}", itemHandler)
+	http.HandleFunc("/delete/{id}", deleteHandler)
 	http.HandleFunc("/edit/{id}", editHandler)
 	http.HandleFunc("/edit/{id}/done", editDoneHandler)
 	http.HandleFunc("/addlink", addLinkHandler)
