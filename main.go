@@ -66,6 +66,8 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
+	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
+
 	data := TemplateAll{
 		Wishlist: make([]TemplateWish, len(wishlist)),
 		NewWish:  Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
@@ -75,7 +77,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 		data.Wishlist[i].Wish = t
 	}
 
-	if err := templateWishlist.ExecuteTemplate(w, "all", data); err != nil {
+	if err := tmpTemplate.ExecuteTemplate(w, "all", data); err != nil {
 		fmt.Println(err)
 	}
 
