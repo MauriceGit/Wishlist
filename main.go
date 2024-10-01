@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
@@ -51,7 +52,7 @@ type session struct {
 }
 
 type userdata struct {
-	passwordHash string
+	passwordHash []byte
 }
 
 var (
@@ -65,8 +66,8 @@ var (
 
 	users = map[string]userdata{
 		"admin":   userdata{hashPassword("admin", "passwort")},
-		"maurice": userdata{hashPassword("maurice", "passwort")},
-		"nadine":  userdata{hashPassword("nadine", "passwort")},
+		"Maurice": userdata{hashPassword("Maurice", "passwort")},
+		"Nadine":  userdata{hashPassword("Nadine", "passwort")},
 	}
 	sessions = map[string]session{}
 
@@ -163,15 +164,13 @@ func newUUID() (error, string) {
 		return err, ""
 	}
 	return nil, fmt.Sprintf("%X", b)
-	//return fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
-func hashPassword(user, password string) string {
-	return password
+func hashPassword(user, password string) []byte {
 	h := sha256.New()
 	h.Write([]byte(password))
 	h.Write([]byte(user))
-	return string(h.Sum(nil)[:])
+	return h.Sum(nil)
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -207,8 +206,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		//if bytes.Equal(pHash, userData.passwordHash) {
-		if pHash != userData.passwordHash {
+		if !bytes.Equal(pHash, userData.passwordHash) {
+			//if pHash != userData.passwordHash {
 			fmt.Printf("User '%v' exists, but wrong password.\n", user)
 			w.WriteHeader(http.StatusUnauthorized)
 			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
@@ -252,17 +251,15 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	c, err := r.Cookie("session_token")
-	if err != nil {
-		if err == http.ErrNoCookie {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(http.StatusBadRequest)
+
+	if !handleUserAuthentication(w, r) {
 		return
 	}
+	// handleUserAuthentication makes sure, that the cookie and session_token exist!
+	c, _ := r.Cookie("session_token")
 	sessionToken := c.Value
 
+	// The complete if can be removed. Delete is a no-op if the sessionToken doesn't exist!
 	if user, ok := sessions[sessionToken]; ok {
 		fmt.Printf("Successfully logged out user '%v'\n", user.username)
 	}
@@ -288,6 +285,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int) {
+
 	if r.Header.Get("HX-Request") == "true" {
 		if err := templateWishlist.ExecuteTemplate(w, template, TemplateWish{
 			Index: idx,
@@ -302,6 +300,9 @@ func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, 
 
 // Handler to toggle todo item
 func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), false)
 
@@ -322,7 +323,9 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	// Delete an item!
 	if r.Method == http.MethodDelete {
 		idx := parseId(r.PathValue("id"), false)
@@ -342,7 +345,9 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func itemHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), false)
 
@@ -359,7 +364,9 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func editHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), true)
 		if idx < 0 {
@@ -384,7 +391,9 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func addLinkHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		mu.Lock()
 		defer mu.Unlock()
@@ -421,7 +430,9 @@ func loginPageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func newItemHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 
 		mu.Lock()
@@ -450,7 +461,9 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func editDoneHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodPost {
 		idx := parseId(r.PathValue("id"), false)
 
