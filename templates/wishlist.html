@@ -160,7 +160,60 @@
     placeholder.classList.toggle('hidden');
   }
 </script>
+{{end}}
 
+{{define "wishlist"}}
+<div class="container mx-auto p-4">
+    <h1 class="text-3xl font-bold mb-4 py-6">Nadine Geburtstag:</h1>
+    <div class="grid grid-cols-1 gap-4">
+        {{range $index, $wish := .Wishlist}}
+            {{template "wish-item" $wish}}
+        {{end}}
+        {{template "plus-button" .NewWish}}
+    </div>
+</div>
+{{end}}
+
+{{define "login-error"}}
+<div class="w-full py-4 font-medium bg-red-100 rounded-lg flex items-center justify-center mt-5">
+    Wrong Username or Password
+</div>
+{{end}}
+
+{{define "login"}}
+<form hx-target="#error-message" hx-swap="innerHTML" hx-post="/login" class="min-h-screen bg-gray-100 text-gray-900 flex justify-center">
+    <div class="max-w-screen-xl m-0 sm:m-10 bg-white shadow sm:rounded-lg flex justify-center flex-1">
+        <div class="lg:w-1/2 xl:w-5/12 p-6 sm:p-12">
+            <div class="mt-12 flex flex-col items-center">
+                <h1 class="text-2xl xl:text-3xl font-extrabold">
+                    Login
+                </h1>
+                <div class="w-full flex-1 mt-8">
+                   <div class="mx-auto max-w-xs">
+                        <input
+                            class="w-full px-8 py-4 rounded-lg font-medium bg-gray-100 border border-gray-200 placeholder-gray-500 text-sm focus:outline-none focus:border-gray-400 focus:bg-white"
+                            name="email" placeholder="Username" />
+                        <input
+                            class="w-full px-8 py-4 rounded-lg font-medium bg-gray-100 border border-gray-200 placeholder-gray-500 text-sm focus:outline-none focus:border-gray-400 focus:bg-white mt-5"
+                            name="password" type="password" placeholder="Password" />
+                        <button type="submit"
+                            class="mt-5 tracking-wide font-semibold bg-lime-600 hover:bg-lime-700 text-gray-100 w-full py-4 rounded-lg transition-all duration-300 ease-in-out flex items-center justify-center focus:shadow-outline focus:outline-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+                            </svg>
+                            <span class="ml-3">
+                                Login
+                            </span>
+                        </button>
+
+                        <!-- Error message placeholder -->
+                        <div id="error-message"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
 {{end}}
 
 {{define "all"}}
@@ -206,23 +259,30 @@
                 </a>
             </div>
 
+            {{$page := "/loginpage"}}
+            {{if .Authenticated}}
+                {{$page = "/logout"}}
+            {{end}}
             <div class="flex flex-col lg:flex-row lg:items-center lg:space-x-4 mt-4 lg:mt-0">
-                <a href="#logout" class="text-xl lg:inline-block text-purple-100 hover:text-white">
-                    Logout (Maurice)
+                <a href="{{$page}}" hx-get="{{$page}}" hx-target="#main-content" hx-swap="innerHTML" class="text-xl lg:inline-block text-purple-100 hover:text-white">
+                    {{if .Authenticated}}
+                        Logout ({{.Username}})
+                    {{else}}
+                        Login
+                    {{end}}
                 </a>
             </div>
         </div>
     </nav>
 
-    <div class="container mx-auto p-4">
-        <h1 class="text-3xl font-bold mb-4 py-6">Nadine Geburtstag:</h1>
-        <div class="grid grid-cols-1 gap-4">
-            {{range $index, $wish := .Wishlist}}
-                {{template "wish-item" $wish}}
-            {{end}}
-            {{template "plus-button" .NewWish}}
-        </div>
+    <div id="main-content">
+        {{if .Authenticated}}
+            {{template "wishlist" .}}
+        {{else}}
+            {{template "login" .}}
+        {{end}}
     </div>
+
 </body>
 </html>
 {{end}}
