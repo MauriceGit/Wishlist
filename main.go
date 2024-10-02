@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type Wish struct {
@@ -36,8 +40,19 @@ type TemplateEditWish struct {
 }
 
 type TemplateAll struct {
-	Wishlist []TemplateWish
-	NewWish  Button
+	Wishlist      []TemplateWish
+	NewWish       Button
+	Authenticated bool
+	Username      string
+}
+
+type session struct {
+	username string
+	expire   time.Time
+}
+
+type userdata struct {
+	passwordHash []byte
 }
 
 var (
@@ -49,8 +64,19 @@ var (
 	}
 	mu sync.Mutex
 
+	users = map[string]userdata{
+		"admin":   userdata{hashPassword("admin", "passwort")},
+		"Maurice": userdata{hashPassword("Maurice", "passwort")},
+		"Nadine":  userdata{hashPassword("Nadine", "passwort")},
+	}
+	sessions = map[string]session{}
+
 	templateWishlist = template.Must(template.ParseFiles("templates/wishlist.html"))
 )
+
+func (s *session) isExpired() bool {
+	return s.expire.Before(time.Now())
+}
 
 func parseId(id string, strict bool) int {
 	idx, err := strconv.Atoi(id)
@@ -61,20 +87,66 @@ func parseId(id string, strict bool) int {
 	return idx
 }
 
-// Handler for rendering the full list
+// checkAuthentication checks, if the user is currently logged in and returns the username.
+func checkAuthentication(r *http.Request) (string, bool, int) {
+	c, err := r.Cookie("session_token")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			return "", false, http.StatusUnauthorized
+		}
+		return "", false, http.StatusBadRequest
+	}
+	sessionToken := c.Value
+
+	fmt.Printf("Check session with token: '%v'\n", sessionToken)
+
+	session, ok := sessions[sessionToken]
+	if !ok {
+		fmt.Println("Session not ok!")
+		return "", false, http.StatusUnauthorized
+	}
+
+	if session.isExpired() {
+		fmt.Println("Session expired???")
+		delete(sessions, sessionToken)
+		return "", false, http.StatusUnauthorized
+	}
+	return session.username, true, 0
+}
+
+// handleUserAuthentication will check, if the user is authenticated and return true.
+// Otherwise it will redirect to / and return false
+func handleUserAuthentication(w http.ResponseWriter, r *http.Request) bool {
+	_, ok, statusCode := checkAuthentication(r)
+	if !ok {
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(statusCode)
+	}
+	return ok
+}
+
+// wishlistHandler handles the landing page. If the user is not authenticated, it will show the login screen.
+// otherwise it will show the users wishlist.
 func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
+	user, ok, _ := checkAuthentication(r)
+	fmt.Printf("Authenticate user '%v': %v\n", user, ok)
+
 	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
 
 	data := TemplateAll{
-		Wishlist: make([]TemplateWish, len(wishlist)),
-		NewWish:  Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
+		Wishlist:      make([]TemplateWish, len(wishlist)),
+		NewWish:       Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
+		Authenticated: ok,
+		Username:      user,
 	}
-	for i, t := range wishlist {
-		data.Wishlist[i].Index = i
-		data.Wishlist[i].Wish = t
+	if ok {
+		for i, t := range wishlist {
+			data.Wishlist[i].Index = i
+			data.Wishlist[i].Wish = t
+		}
 	}
 
 	if err := tmpTemplate.ExecuteTemplate(w, "all", data); err != nil {
@@ -83,7 +155,137 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// https://stackoverflow.com/questions/15130321/is-there-a-method-to-generate-a-uuid-with-go-language
+func newUUID() (error, string) {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return err, ""
+	}
+	return nil, fmt.Sprintf("%X", b)
+}
+
+func hashPassword(user, password string) []byte {
+	h := sha256.New()
+	h.Write([]byte(password))
+	h.Write([]byte(user))
+	return h.Sum(nil)
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+
+	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
+
+	if r.Method == http.MethodPost {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Unable to parse form", http.StatusBadRequest)
+			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+
+		fmt.Println(r.Form)
+
+		user := r.FormValue("email")
+		password := r.FormValue("password")
+		pHash := hashPassword(user, password)
+		fmt.Printf("%v\n", pHash)
+
+		userData, ok := users[user]
+		if !ok {
+			fmt.Printf("User '%v' does not exist.\n", user)
+			w.WriteHeader(http.StatusOK)
+			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+
+		if !bytes.Equal(pHash, userData.passwordHash) {
+			//if pHash != userData.passwordHash {
+			fmt.Printf("User '%v' exists, but wrong password.\n", user)
+			w.WriteHeader(http.StatusUnauthorized)
+			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+
+		err, sessionToken := newUUID()
+		if err != nil {
+			fmt.Printf("Error when generating a new uuid: %v\n", err)
+			w.WriteHeader(http.StatusUnauthorized)
+			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+		sessionExpire := time.Now().Add(10 * time.Minute)
+
+		sessions[sessionToken] = session{
+			username: user,
+			expire:   sessionExpire,
+		}
+
+		fmt.Printf("New session for user '%v' and uuid: '%v'\n", user, sessionToken)
+
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session_token",
+			Value:    sessionToken,
+			Expires:  sessionExpire,
+			Path:     "/",                   // Ensures the cookie is available throughout the site
+			SameSite: http.SameSiteNoneMode, // Use Lax, or change to Strict or None as per your needs
+			Secure:   false,                 // Must be true if SameSite=None (requires HTTPS)
+			HttpOnly: true,                  // Prevents JavaScript from accessing the cookie
+		})
+
+		// User authenticated and everything is OK
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+
+	if !handleUserAuthentication(w, r) {
+		return
+	}
+	// handleUserAuthentication makes sure, that the cookie and session_token exist!
+	c, _ := r.Cookie("session_token")
+	sessionToken := c.Value
+
+	// The complete if can be removed. Delete is a no-op if the sessionToken doesn't exist!
+	if user, ok := sessions[sessionToken]; ok {
+		fmt.Printf("Successfully logged out user '%v'\n", user.username)
+	}
+
+	// remove user session!
+	delete(sessions, sessionToken)
+
+	// We need to let the client know that the cookie is expired
+	// In the response, we set the session token to an empty
+	// value and set its expiry as the current time
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Expires:  time.Now(),
+		Path:     "/",                   // Ensures the cookie is available throughout the site
+		SameSite: http.SameSiteNoneMode, // Use Lax, or change to Strict or None as per your needs
+		Secure:   false,                 // Must be true if SameSite=None (requires HTTPS)
+		HttpOnly: true,                  // Prevents JavaScript from accessing the cookie
+	})
+
+	w.Header().Set("HX-Redirect", "/")
+	w.WriteHeader(http.StatusOK)
+}
+
 func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int) {
+
 	if r.Header.Get("HX-Request") == "true" {
 		if err := templateWishlist.ExecuteTemplate(w, template, TemplateWish{
 			Index: idx,
@@ -98,6 +300,9 @@ func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, 
 
 // Handler to toggle todo item
 func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), false)
 
@@ -118,7 +323,9 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	// Delete an item!
 	if r.Method == http.MethodDelete {
 		idx := parseId(r.PathValue("id"), false)
@@ -138,7 +345,9 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func itemHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), false)
 
@@ -155,7 +364,9 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func editHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		idx := parseId(r.PathValue("id"), true)
 		if idx < 0 {
@@ -180,7 +391,9 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func addLinkHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 		mu.Lock()
 		defer mu.Unlock()
@@ -201,8 +414,25 @@ func addLinkHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newItemHandler(w http.ResponseWriter, r *http.Request) {
+func loginPageHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		mu.Lock()
+		defer mu.Unlock()
 
+		if r.Header.Get("HX-Request") == "true" {
+			if err := templateWishlist.ExecuteTemplate(w, "login", nil); err != nil {
+				fmt.Println(err)
+			}
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
+}
+
+func newItemHandler(w http.ResponseWriter, r *http.Request) {
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodGet {
 
 		mu.Lock()
@@ -231,7 +461,9 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func editDoneHandler(w http.ResponseWriter, r *http.Request) {
-
+	if !handleUserAuthentication(w, r) {
+		return
+	}
 	if r.Method == http.MethodPost {
 		idx := parseId(r.PathValue("id"), false)
 
@@ -268,6 +500,11 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
+	for name, v := range users {
+		fmt.Printf("%v: %v\n", name, v.passwordHash)
+	}
+
 	http.HandleFunc("/", wishlistHandler)
 	http.HandleFunc("/reserve/{id}", reserveWishHandler)
 	http.HandleFunc("/new", newItemHandler)
@@ -276,5 +513,8 @@ func main() {
 	http.HandleFunc("/edit/{id}", editHandler)
 	http.HandleFunc("/edit/{id}/done", editDoneHandler)
 	http.HandleFunc("/addlink", addLinkHandler)
+	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/loginpage", loginPageHandler)
+	http.HandleFunc("/logout", logoutHandler)
 	http.ListenAndServe(":8080", nil)
 }
