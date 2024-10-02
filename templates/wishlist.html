@@ -216,6 +216,44 @@
 </form>
 {{end}}
 
+{{define "overview"}}
+<div class="bg-gray-100 min-h-screen py-12">
+    <div class="container mx-auto px-4">
+    <!-- Title -->
+    <h1 class="text-3xl font-bold text-center mb-8">Meine Wunschlisten</h1>
+
+    <!-- Grid container for wishlist cards -->
+        <div class="grid gap-6 lg:grid-cols-2 md:grid-cols-2 sm:grid-cols-1">
+
+            <!-- Example Card 1 -->
+            <a href="/wishlist/1" class="block p-6 bg-white rounded-lg shadow hover:bg-pink-100 transition duration-300 ease-in-out">
+                <h2 class="text-2xl font-bold text-pink-700 mb-2">Birthday Wishlist</h2>
+                <p class="text-gray-700">10 Wishes</p>
+            </a>
+
+            <!-- Example Card 2 -->
+            <a href="/wishlist/2" class="block p-6 bg-white rounded-lg shadow hover:bg-pink-100 transition duration-300 ease-in-out">
+                <h2 class="text-2xl font-bold text-pink-700 mb-2">Christmas Wishlist</h2>
+                <p class="text-gray-700">8 Wishes</p>
+            </a>
+
+            <!-- Example Card 3 -->
+            <a href="/wishlist/3" class="block p-6 bg-white rounded-lg shadow hover:bg-pink-100 transition duration-300 ease-in-out">
+                <h2 class="text-2xl font-bold text-pink-700 mb-2">New Year Wishlist</h2>
+                <p class="text-gray-700">5 Wishes</p>
+            </a>
+
+            {{ range .Wishlists }}
+            <a href="/wishlist/{{ .ID }}" class="block p-6 bg-white rounded-lg shadow hover:bg-pink-100 transition duration-300 ease-in-out">
+                <h2 class="text-2xl font-bold text-pink-700 mb-2">{{ .Title }}</h2>
+                <p class="text-gray-700">{{ len .Wishes }} Wishes</p>
+            </a>
+            {{ end }}
+        </div>
+    </div>
+</div>
+{{end}}
+
 {{define "all"}}
 <!DOCTYPE html>
 <html lang="en">
