@@ -40,6 +40,7 @@ type TemplateEditWish struct {
 }
 
 type TemplateAll struct {
+	Title         string
 	Wishlist      []TemplateWish
 	NewWish       Button
 	Authenticated bool
@@ -58,7 +59,7 @@ type Wishlist struct {
 
 type userdata struct {
 	passwordHash []byte
-	wishlists    []Wishlist
+	Wishlists    []Wishlist
 }
 
 var (
@@ -130,9 +131,85 @@ func handleUserAuthentication(w http.ResponseWriter, r *http.Request) (string, b
 	return user, ok
 }
 
+// landingPageHandler handles the landing page. If the user is not authenticated, it will show the login screen.
+// otherwise it will show the users wishlists.
+func allHandler(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	user, ok, _ := checkAuthentication(r)
+
+	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
+
+	data := struct {
+		Wishlists     []Wishlist
+		Authenticated bool
+		Username      string
+	}{
+		Wishlists:     nil,
+		Authenticated: ok,
+		Username:      user,
+	}
+
+	if ok {
+		data.Wishlists = users[user].Wishlists
+	}
+
+	if err := tmpTemplate.ExecuteTemplate(w, "all", data); err != nil {
+		fmt.Println(err)
+	}
+}
+
+// landingPageHandler handles the landing page. If the user is not authenticated, it will show the login screen.
+// otherwise it will show the users wishlists.
+func landingpageHandler(w http.ResponseWriter, r *http.Request) {
+
+	if err := templateWishlist.ExecuteTemplate(w, "landing-page", nil); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func overviewHandler(w http.ResponseWriter, r *http.Request) {
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if err := templateWishlist.ExecuteTemplate(w, "overview", users[user]); err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
+func wishlistHandler(w http.ResponseWriter, r *http.Request) {
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+
+		idx := parseId(r.PathValue("id"))
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		data := TemplateAll{
+			Title:         users[user].Wishlists[idx].Title,
+			Wishlist:      make([]TemplateWish, len(users[user].Wishlists[idx].Wishes)),
+			NewWish:       Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
+			Authenticated: ok,
+			Username:      user,
+		}
+
+		for i, t := range users[user].Wishlists[idx].Wishes {
+			data.Wishlist[i].Index = i
+			data.Wishlist[i].Wish = t
+		}
+
+		if err := templateWishlist.ExecuteTemplate(w, "wishlist", data); err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
 // wishlistHandler handles the landing page. If the user is not authenticated, it will show the login screen.
 // otherwise it will show the users wishlist.
-func wishlistHandler(w http.ResponseWriter, r *http.Request) {
+func wishlistHandler_____(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -148,7 +225,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 		Username:      user,
 	}
 	if ok {
-		wishlist := users[user].wishlists[0]
+		wishlist := users[user].Wishlists[0]
 		data.Wishlist = make([]TemplateWish, len(wishlist.Wishes))
 		for i, t := range wishlist.Wishes {
 			data.Wishlist[i].Index = i
@@ -159,7 +236,6 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	if err := tmpTemplate.ExecuteTemplate(w, "all", data); err != nil {
 		fmt.Println(err)
 	}
-
 }
 
 // https://stackoverflow.com/questions/15130321/is-there-a-method-to-generate-a-uuid-with-go-language
@@ -254,6 +330,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		// User authenticated and everything is OK
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusOK)
+		//http.Redirect(w, r, "/overview", http.StatusSeeOther)
 	}
 }
 
@@ -318,9 +395,9 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 		defer mu.Unlock()
 
 		reserve := r.FormValue("reserve") == "true"
-		users[user].wishlists[0].Wishes[idx].Reserved = reserve
+		users[user].Wishlists[0].Wishes[idx].Reserved = reserve
 
-		writeTemplateWish(w, r, "wish-item", idx, users[user].wishlists[0].Wishes[idx])
+		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[0].Wishes[idx])
 	}
 }
 
@@ -338,8 +415,8 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		wishlist := users[user].wishlists[0].Wishes
-		users[user].wishlists[0].Wishes = append(wishlist[:idx], wishlist[idx+1:]...)
+		wishlist := users[user].Wishlists[0].Wishes
+		users[user].Wishlists[0].Wishes = append(wishlist[:idx], wishlist[idx+1:]...)
 
 		// Return nothing. That should just remove the currently edited item!
 	}
@@ -358,7 +435,7 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		wish := users[user].wishlists[0].Wishes[idx]
+		wish := users[user].Wishlists[0].Wishes[idx]
 		writeTemplateWish(w, r, "wish-item", idx, wish)
 	}
 }
@@ -377,7 +454,7 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("HX-Request") == "true" {
 			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateEditWish{
 				Index:   idx,
-				Wish:    users[user].wishlists[0].Wishes[idx],
+				Wish:    users[user].Wishlists[0].Wishes[idx],
 				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
 			}); err != nil {
 				fmt.Println(err)
@@ -395,13 +472,7 @@ func addLinkHandler(w http.ResponseWriter, r *http.Request) {
 		defer mu.Unlock()
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "add-link", struct {
-				Link    string
-				NewLink Button
-			}{
-				Link:    "",
-				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
-			}); err != nil {
+			if err := templateWishlist.ExecuteTemplate(w, "link", ""); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -429,23 +500,14 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
-		mu.Lock()
-		defer mu.Unlock()
-
-		data := struct {
-			EditWish TemplateEditWish
-			NewWish  Button
-		}{
-			EditWish: TemplateEditWish{
-				Index:   -1, // An invalid index so that we generate a new item after the OK-button
-				Wish:    Wish{"", "", nil, "", false},
-				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
-			},
-			NewWish: Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
+		data := TemplateEditWish{
+			Index:   -1, // An invalid index so that we generate a new item after the OK-button
+			Wish:    Wish{"", "", nil, "", false},
+			NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "new-wish", data); err != nil {
+			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", data); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -469,8 +531,8 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 		// A new item was added!
 		if idx == -1 {
-			users[user].wishlists[0].Wishes = append(users[user].wishlists[0].Wishes, Wish{"", "", nil, "", false})
-			idx = len(users[user].wishlists[0].Wishes) - 1
+			users[user].Wishlists[0].Wishes = append(users[user].Wishlists[0].Wishes, Wish{"", "", nil, "", false})
+			idx = len(users[user].Wishlists[0].Wishes) - 1
 		}
 
 		// filter empty links
@@ -481,14 +543,13 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		users[user].wishlists[0].Wishes[idx].Name = r.FormValue("name")
-		users[user].wishlists[0].Wishes[idx].Description = r.FormValue("description")
-		users[user].wishlists[0].Wishes[idx].Links = links
-		users[user].wishlists[0].Wishes[idx].ImageUrl = r.FormValue("imageUrl")
+		users[user].Wishlists[0].Wishes[idx].Name = r.FormValue("name")
+		users[user].Wishlists[0].Wishes[idx].Description = r.FormValue("description")
+		users[user].Wishlists[0].Wishes[idx].Links = links
+		users[user].Wishlists[0].Wishes[idx].ImageUrl = r.FormValue("imageUrl")
 
-		writeTemplateWish(w, r, "wish-item", idx, users[user].wishlists[0].Wishes[idx])
+		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[0].Wishes[idx])
 	}
-
 }
 
 func main() {
@@ -501,14 +562,30 @@ func main() {
 			{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
 		},
 	}
+	gold := "https://www.muenzeoesterreich.at/var/em_plain_site/storage/images/_aliases/product_full/media/bilder/produktbilder/1.anlegen/handelsgold_mtt/1fach-dukaten-av/9572-4-ger-DE/1fach-dukaten-av.png"
+	kinderwagen := "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fi.otto.de%2Fi%2Fotto%2F16455872-f2bb-5a61-bfb2-261f5713a79a%3Fh%26%2361%3B520%26amp%3Bw%2661%3B551%26amp%3Bsm%2661%3Bclamp&f=1&nofb=1&ipt=492a936d362bfd9dfa8095c11c15251238c529f986d731b49d66a8a3f162df81&ipo=images"
+	nWishlist := Wishlist{
+		Title: "Nadines Wunschliste",
+		Wishes: []Wish{
+			{"Ganz viel Gold und Reichtum", "Oder so. Ich muss da nochmal nachfragen :)", []string{"gold.de"}, gold, false},
+			{"Ein Spaziergehpapabärchen", "Am liebsten jeden Morgen und nachmittags nochmal!", nil, kinderwagen, true},
+			{"Ein frisch gesaugtes Bad und Schlafzimmer", "Das hätte ich gerne zu Weihnachten", nil, defaultImage, false},
+		},
+	}
 	users["Maurice"] = userdata{
 		passwordHash: hashPassword("Maurice", "passwort"),
-		wishlists:    []Wishlist{mWishlist},
+		Wishlists:    []Wishlist{mWishlist},
+	}
+	users["Nadine"] = userdata{
+		passwordHash: hashPassword("Nadine", "passwort"),
+		Wishlists:    []Wishlist{nWishlist},
 	}
 
-	fmt.Println(users)
+	http.HandleFunc("/", allHandler)
+	http.HandleFunc("/landingpage", landingpageHandler)
+	http.HandleFunc("/overview", overviewHandler)
+	http.HandleFunc("/wishlist/{id}", wishlistHandler)
 
-	http.HandleFunc("/", wishlistHandler)
 	http.HandleFunc("/reserve/{id}", reserveWishHandler)
 	http.HandleFunc("/new", newItemHandler)
 	http.HandleFunc("/item/{id}", itemHandler)
