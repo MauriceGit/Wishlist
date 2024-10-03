@@ -51,24 +51,29 @@ type session struct {
 	expire   time.Time
 }
 
+type Wishlist struct {
+	Title  string
+	Wishes []Wish
+}
+
 type userdata struct {
 	passwordHash []byte
+	wishlists    []Wishlist
 }
 
 var (
 	defaultImage = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images"
-	wishlist     = []Wish{
-		{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
-		{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
-		{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
-	}
+
+	/*
+		wishlist     = []Wish{
+			{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
+			{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
+			{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
+		}
+	*/
 	mu sync.Mutex
 
-	users = map[string]userdata{
-		"admin":   userdata{hashPassword("admin", "passwort")},
-		"Maurice": userdata{hashPassword("Maurice", "passwort")},
-		"Nadine":  userdata{hashPassword("Nadine", "passwort")},
-	}
+	users    = map[string]userdata{}
 	sessions = map[string]session{}
 
 	templateWishlist = template.Must(template.ParseFiles("templates/wishlist.html"))
@@ -78,10 +83,10 @@ func (s *session) isExpired() bool {
 	return s.expire.Before(time.Now())
 }
 
-func parseId(id string, strict bool) int {
+func parseId(id string) int {
 	idx, err := strconv.Atoi(id)
-	if err != nil || strict && (idx < 0 || idx >= len(wishlist)) {
-		fmt.Printf("Parsing the id '%v' results in err '%v' or an index that is out-of-bounds\n", id, err)
+	if err != nil {
+		fmt.Printf("Parsing the id '%v' results in err '%v'\n", id, err)
 		return -2
 	}
 	return idx
@@ -116,13 +121,13 @@ func checkAuthentication(r *http.Request) (string, bool, int) {
 
 // handleUserAuthentication will check, if the user is authenticated and return true.
 // Otherwise it will redirect to / and return false
-func handleUserAuthentication(w http.ResponseWriter, r *http.Request) bool {
-	_, ok, statusCode := checkAuthentication(r)
+func handleUserAuthentication(w http.ResponseWriter, r *http.Request) (string, bool) {
+	user, ok, statusCode := checkAuthentication(r)
 	if !ok {
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(statusCode)
 	}
-	return ok
+	return user, ok
 }
 
 // wishlistHandler handles the landing page. If the user is not authenticated, it will show the login screen.
@@ -137,13 +142,15 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
 
 	data := TemplateAll{
-		Wishlist:      make([]TemplateWish, len(wishlist)),
+		Wishlist:      nil,
 		NewWish:       Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
 		Authenticated: ok,
 		Username:      user,
 	}
 	if ok {
-		for i, t := range wishlist {
+		wishlist := users[user].wishlists[0]
+		data.Wishlist = make([]TemplateWish, len(wishlist.Wishes))
+		for i, t := range wishlist.Wishes {
 			data.Wishlist[i].Index = i
 			data.Wishlist[i].Wish = t
 		}
@@ -252,44 +259,41 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 
-	if !handleUserAuthentication(w, r) {
-		return
+	if user, ok := handleUserAuthentication(w, r); ok {
+
+		// handleUserAuthentication makes sure, that the cookie and session_token exist!
+		c, _ := r.Cookie("session_token")
+		sessionToken := c.Value
+
+		fmt.Printf("Successfully logged out user '%v'\n", user)
+
+		// remove user session!
+		delete(sessions, sessionToken)
+
+		// We need to let the client know that the cookie is expired
+		// In the response, we set the session token to an empty
+		// value and set its expiry as the current time
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session_token",
+			Value:    "",
+			Expires:  time.Now(),
+			Path:     "/",                   // Ensures the cookie is available throughout the site
+			SameSite: http.SameSiteNoneMode, // Use Lax, or change to Strict or None as per your needs
+			Secure:   false,                 // Must be true if SameSite=None (requires HTTPS)
+			HttpOnly: true,                  // Prevents JavaScript from accessing the cookie
+		})
+
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
 	}
-	// handleUserAuthentication makes sure, that the cookie and session_token exist!
-	c, _ := r.Cookie("session_token")
-	sessionToken := c.Value
-
-	// The complete if can be removed. Delete is a no-op if the sessionToken doesn't exist!
-	if user, ok := sessions[sessionToken]; ok {
-		fmt.Printf("Successfully logged out user '%v'\n", user.username)
-	}
-
-	// remove user session!
-	delete(sessions, sessionToken)
-
-	// We need to let the client know that the cookie is expired
-	// In the response, we set the session token to an empty
-	// value and set its expiry as the current time
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_token",
-		Value:    "",
-		Expires:  time.Now(),
-		Path:     "/",                   // Ensures the cookie is available throughout the site
-		SameSite: http.SameSiteNoneMode, // Use Lax, or change to Strict or None as per your needs
-		Secure:   false,                 // Must be true if SameSite=None (requires HTTPS)
-		HttpOnly: true,                  // Prevents JavaScript from accessing the cookie
-	})
-
-	w.Header().Set("HX-Redirect", "/")
-	w.WriteHeader(http.StatusOK)
 }
 
-func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int) {
+func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int, wish Wish) {
 
 	if r.Header.Get("HX-Request") == "true" {
 		if err := templateWishlist.ExecuteTemplate(w, template, TemplateWish{
 			Index: idx,
-			Wish:  wishlist[idx],
+			Wish:  wish,
 		}); err != nil {
 			fmt.Println(err)
 		}
@@ -300,11 +304,10 @@ func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, 
 
 // Handler to toggle todo item
 func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
-	if !handleUserAuthentication(w, r) {
-		return
-	}
-	if r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"), false)
+
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+
+		idx := parseId(r.PathValue("id"))
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
@@ -315,20 +318,17 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 		defer mu.Unlock()
 
 		reserve := r.FormValue("reserve") == "true"
-		wishlist[idx].Reserved = reserve
+		users[user].wishlists[0].Wishes[idx].Reserved = reserve
 
-		writeTemplateWish(w, r, "wish-item", idx)
+		writeTemplateWish(w, r, "wish-item", idx, users[user].wishlists[0].Wishes[idx])
 	}
-
 }
 
 func deleteHandler(w http.ResponseWriter, r *http.Request) {
-	if !handleUserAuthentication(w, r) {
-		return
-	}
+
 	// Delete an item!
-	if r.Method == http.MethodDelete {
-		idx := parseId(r.PathValue("id"), false)
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodDelete {
+		idx := parseId(r.PathValue("id"))
 
 		// possibly a cancel on a newly created item. Lets just return nothing instead!
 		if idx < 0 {
@@ -338,18 +338,17 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		wishlist = append(wishlist[:idx], wishlist[idx+1:]...)
+		wishlist := users[user].wishlists[0].Wishes
+		users[user].wishlists[0].Wishes = append(wishlist[:idx], wishlist[idx+1:]...)
 
 		// Return nothing. That should just remove the currently edited item!
 	}
 }
 
 func itemHandler(w http.ResponseWriter, r *http.Request) {
-	if !handleUserAuthentication(w, r) {
-		return
-	}
-	if r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"), false)
+
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+		idx := parseId(r.PathValue("id"))
 
 		// possibly a cancel on a newly created item. Lets just return nothing instead!
 		if idx == -1 {
@@ -359,16 +358,15 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 
-		writeTemplateWish(w, r, "wish-item", idx)
+		wish := users[user].wishlists[0].Wishes[idx]
+		writeTemplateWish(w, r, "wish-item", idx, wish)
 	}
 }
 
 func editHandler(w http.ResponseWriter, r *http.Request) {
-	if !handleUserAuthentication(w, r) {
-		return
-	}
-	if r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"), true)
+
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+		idx := parseId(r.PathValue("id"))
 		if idx < 0 {
 			return
 		}
@@ -379,7 +377,7 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("HX-Request") == "true" {
 			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateEditWish{
 				Index:   idx,
-				Wish:    wishlist[idx],
+				Wish:    users[user].wishlists[0].Wishes[idx],
 				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
 			}); err != nil {
 				fmt.Println(err)
@@ -391,10 +389,8 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func addLinkHandler(w http.ResponseWriter, r *http.Request) {
-	if !handleUserAuthentication(w, r) {
-		return
-	}
-	if r.Method == http.MethodGet {
+
+	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -430,10 +426,8 @@ func loginPageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func newItemHandler(w http.ResponseWriter, r *http.Request) {
-	if !handleUserAuthentication(w, r) {
-		return
-	}
-	if r.Method == http.MethodGet {
+
+	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
 		mu.Lock()
 		defer mu.Unlock()
@@ -461,11 +455,9 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func editDoneHandler(w http.ResponseWriter, r *http.Request) {
-	if !handleUserAuthentication(w, r) {
-		return
-	}
-	if r.Method == http.MethodPost {
-		idx := parseId(r.PathValue("id"), false)
+
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPost {
+		idx := parseId(r.PathValue("id"))
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
@@ -477,8 +469,8 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 		// A new item was added!
 		if idx == -1 {
-			wishlist = append(wishlist, Wish{"", "", nil, "", false})
-			idx = len(wishlist) - 1
+			users[user].wishlists[0].Wishes = append(users[user].wishlists[0].Wishes, Wish{"", "", nil, "", false})
+			idx = len(users[user].wishlists[0].Wishes) - 1
 		}
 
 		// filter empty links
@@ -489,21 +481,32 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		wishlist[idx].Name = r.FormValue("name")
-		wishlist[idx].Description = r.FormValue("description")
-		wishlist[idx].Links = links
-		wishlist[idx].ImageUrl = r.FormValue("imageUrl")
+		users[user].wishlists[0].Wishes[idx].Name = r.FormValue("name")
+		users[user].wishlists[0].Wishes[idx].Description = r.FormValue("description")
+		users[user].wishlists[0].Wishes[idx].Links = links
+		users[user].wishlists[0].Wishes[idx].ImageUrl = r.FormValue("imageUrl")
 
-		writeTemplateWish(w, r, "wish-item", idx)
+		writeTemplateWish(w, r, "wish-item", idx, users[user].wishlists[0].Wishes[idx])
 	}
 
 }
 
 func main() {
 
-	for name, v := range users {
-		fmt.Printf("%v: %v\n", name, v.passwordHash)
+	mWishlist := Wishlist{
+		Title: "Wunschliste",
+		Wishes: []Wish{
+			{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
+			{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
+			{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
+		},
 	}
+	users["Maurice"] = userdata{
+		passwordHash: hashPassword("Maurice", "passwort"),
+		wishlists:    []Wishlist{mWishlist},
+	}
+
+	fmt.Println(users)
 
 	http.HandleFunc("/", wishlistHandler)
 	http.HandleFunc("/reserve/{id}", reserveWishHandler)
