@@ -42,7 +42,7 @@
             {{range $link := .Wish.Links}}
                 {{template "link" $link}}
             {{end}}
-            {{template "plus-button" .NewLink}}
+            {{template "plus-button" (newButton "/addlink" "bg-amber-300" "bg-amber-400" "start")}}
         </div>
 
         <!-- Image URL Input -->
@@ -157,10 +157,10 @@
     <h1 class="text-3xl font-bold mb-4 py-6">{{.Title}}</h1>
     <div class="grid grid-cols-1 gap-4">
         {{range $index, $wish := .Wishlist}}
-            {{template "wish-item" $wish}}
+            {{template "wish-item" (.BundleIndex $index)}}
         {{end}}
 
-        {{template "plus-button" .NewWish}}
+        {{template "plus-button" (newButton "/new" "bg-blue-400" "bg-blue-500" "end")}}
     </div>
 </div>
 {{end}}

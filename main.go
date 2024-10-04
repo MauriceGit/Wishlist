@@ -12,13 +12,7 @@ import (
 	"time"
 )
 
-type Wish struct {
-	Name        string
-	Description string
-	Links       []string
-	ImageUrl    string
-	Reserved    bool
-}
+// ======================== These are only used in the html/template to avoid having to provide different data to the frontend!
 
 type Button struct {
 	Link           string
@@ -33,16 +27,19 @@ type TemplateWish struct {
 	Wish  Wish
 }
 
-type TemplateEditWish struct {
-	Index   int
-	Wish    Wish
-	NewLink Button
+// ========================
+
+type Wish struct {
+	Name        string
+	Description string
+	Links       []string
+	ImageUrl    string
+	Reserved    bool
 }
 
 type TemplateAll struct {
 	Title         string
-	Wishlist      []TemplateWish
-	NewWish       Button
+	Wishlist      []Wish
 	Authenticated bool
 	Username      string
 }
@@ -77,11 +74,23 @@ var (
 	users    = map[string]userdata{}
 	sessions = map[string]session{}
 
-	templateWishlist = template.Must(template.ParseFiles("templates/wishlist.html"))
+	funcMap = template.FuncMap{"newButton": newButton}
+
+	//templateWishlist = template.Must(template.ParseFiles("templates/wishlist.html"))
+	templateWishlist = template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/wishlist.html"))
 )
+
+func newButton(link, color, colorHighlight, side string) Button {
+	return Button{link, color, colorHighlight, side}
+}
 
 func (s *session) isExpired() bool {
 	return s.expire.Before(time.Now())
+}
+
+// This function will be used in the html/template to provide both wish and current index to the sub-template!
+func (wish Wish) BundleIndex(index int) TemplateWish {
+	return TemplateWish{index, wish}
 }
 
 func parseId(id string) int {
@@ -139,8 +148,6 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, ok, _ := checkAuthentication(r)
 
-	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
-
 	data := struct {
 		Wishlists     []Wishlist
 		Authenticated bool
@@ -155,7 +162,7 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 		data.Wishlists = users[user].Wishlists
 	}
 
-	if err := tmpTemplate.ExecuteTemplate(w, "all", data); err != nil {
+	if err := templateWishlist.ExecuteTemplate(w, "all", data); err != nil {
 		fmt.Println(err)
 	}
 }
@@ -190,51 +197,20 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 
 		data := TemplateAll{
 			Title:         users[user].Wishlists[idx].Title,
-			Wishlist:      make([]TemplateWish, len(users[user].Wishlists[idx].Wishes)),
-			NewWish:       Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
+			Wishlist:      users[user].Wishlists[idx].Wishes,
 			Authenticated: ok,
 			Username:      user,
 		}
-
-		for i, t := range users[user].Wishlists[idx].Wishes {
-			data.Wishlist[i].Index = i
-			data.Wishlist[i].Wish = t
-		}
+		/*
+			for i, t := range users[user].Wishlists[idx].Wishes {
+				data.Wishlist[i].Index = i
+				data.Wishlist[i].Wish = t
+			}
+		*/
 
 		if err := templateWishlist.ExecuteTemplate(w, "wishlist", data); err != nil {
 			fmt.Println(err)
 		}
-	}
-}
-
-// wishlistHandler handles the landing page. If the user is not authenticated, it will show the login screen.
-// otherwise it will show the users wishlist.
-func wishlistHandler_____(w http.ResponseWriter, r *http.Request) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	user, ok, _ := checkAuthentication(r)
-	fmt.Printf("Authenticate user '%v': %v\n", user, ok)
-
-	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
-
-	data := TemplateAll{
-		Wishlist:      nil,
-		NewWish:       Button{"/new", "bg-blue-400", "bg-blue-500", "end"},
-		Authenticated: ok,
-		Username:      user,
-	}
-	if ok {
-		wishlist := users[user].Wishlists[0]
-		data.Wishlist = make([]TemplateWish, len(wishlist.Wishes))
-		for i, t := range wishlist.Wishes {
-			data.Wishlist[i].Index = i
-			data.Wishlist[i].Wish = t
-		}
-	}
-
-	if err := tmpTemplate.ExecuteTemplate(w, "all", data); err != nil {
-		fmt.Println(err)
 	}
 }
 
@@ -258,15 +234,13 @@ func hashPassword(user, password string) []byte {
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 
-	tmpTemplate := template.Must(template.ParseFiles("templates/wishlist.html"))
-
 	if r.Method == http.MethodPost {
 		mu.Lock()
 		defer mu.Unlock()
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
-			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -283,7 +257,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			fmt.Printf("User '%v' does not exist.\n", user)
 			w.WriteHeader(http.StatusOK)
-			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -293,7 +267,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			//if pHash != userData.passwordHash {
 			fmt.Printf("User '%v' exists, but wrong password.\n", user)
 			w.WriteHeader(http.StatusUnauthorized)
-			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -303,7 +277,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fmt.Printf("Error when generating a new uuid: %v\n", err)
 			w.WriteHeader(http.StatusUnauthorized)
-			if err := tmpTemplate.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -452,10 +426,9 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 		defer mu.Unlock()
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateEditWish{
-				Index:   idx,
-				Wish:    users[user].Wishlists[0].Wishes[idx],
-				NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
+			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateWish{
+				Index: idx,
+				Wish:  users[user].Wishlists[0].Wishes[idx],
 			}); err != nil {
 				fmt.Println(err)
 			}
@@ -500,10 +473,9 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
-		data := TemplateEditWish{
-			Index:   -1, // An invalid index so that we generate a new item after the OK-button
-			Wish:    Wish{"", "", nil, "", false},
-			NewLink: Button{"/addlink", "bg-amber-300", "bg-amber-400", "start"},
+		data := TemplateWish{
+			Index: -1, // An invalid index so that we generate a new item after the OK-button
+			Wish:  Wish{"", "", nil, "", false},
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
