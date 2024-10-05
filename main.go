@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// ======================== These are only used in the html/template to avoid having to provide different data to the frontend!
+// ======================== Used to communicate with html/template
 
 type Button struct {
 	Link           string
@@ -27,16 +27,6 @@ type TemplateWish struct {
 	Wish  Wish
 }
 
-// ========================
-
-type Wish struct {
-	Name        string
-	Description string
-	Links       []string
-	ImageUrl    string
-	Reserved    bool
-}
-
 type TemplateAll struct {
 	Title         string
 	Wishlist      []Wish
@@ -44,9 +34,21 @@ type TemplateAll struct {
 	Username      string
 }
 
+// ======================== Session Data
+
 type session struct {
 	username string
 	expire   time.Time
+}
+
+// ======================== Internal Wishlist data structures
+
+type Wish struct {
+	Name        string
+	Description string
+	Links       []string
+	ImageUrl    string
+	Reserved    bool
 }
 
 type Wishlist struct {
@@ -62,30 +64,21 @@ type userdata struct {
 var (
 	defaultImage = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images"
 
-	/*
-		wishlist     = []Wish{
-			{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
-			{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
-			{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
-		}
-	*/
 	mu sync.Mutex
 
 	users    = map[string]userdata{}
 	sessions = map[string]session{}
 
-	funcMap = template.FuncMap{"newButton": newButton}
-
-	//templateWishlist = template.Must(template.ParseFiles("templates/wishlist.html"))
+	funcMap          = template.FuncMap{"newButton": newButton}
 	templateWishlist = template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/wishlist.html"))
 )
 
-func newButton(link, color, colorHighlight, side string) Button {
-	return Button{link, color, colorHighlight, side}
-}
-
 func (s *session) isExpired() bool {
 	return s.expire.Before(time.Now())
+}
+
+func newButton(link, color, colorHighlight, side string) Button {
+	return Button{link, color, colorHighlight, side}
 }
 
 // This function will be used in the html/template to provide both wish and current index to the sub-template!
@@ -170,7 +163,6 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 // landingPageHandler handles the landing page. If the user is not authenticated, it will show the login screen.
 // otherwise it will show the users wishlists.
 func landingpageHandler(w http.ResponseWriter, r *http.Request) {
-
 	if err := templateWishlist.ExecuteTemplate(w, "landing-page", nil); err != nil {
 		fmt.Println(err)
 	}
@@ -178,9 +170,6 @@ func landingpageHandler(w http.ResponseWriter, r *http.Request) {
 
 func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		mu.Lock()
-		defer mu.Unlock()
-
 		if err := templateWishlist.ExecuteTemplate(w, "overview", users[user]); err != nil {
 			fmt.Println(err)
 		}
@@ -192,21 +181,12 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 
 		idx := parseId(r.PathValue("id"))
 
-		mu.Lock()
-		defer mu.Unlock()
-
 		data := TemplateAll{
 			Title:         users[user].Wishlists[idx].Title,
 			Wishlist:      users[user].Wishlists[idx].Wishes,
 			Authenticated: ok,
 			Username:      user,
 		}
-		/*
-			for i, t := range users[user].Wishlists[idx].Wishes {
-				data.Wishlist[i].Index = i
-				data.Wishlist[i].Wish = t
-			}
-		*/
 
 		if err := templateWishlist.ExecuteTemplate(w, "wishlist", data); err != nil {
 			fmt.Println(err)
@@ -246,12 +226,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fmt.Println(r.Form)
-
 		user := r.FormValue("email")
 		password := r.FormValue("password")
 		pHash := hashPassword(user, password)
-		fmt.Printf("%v\n", pHash)
 
 		userData, ok := users[user]
 		if !ok {
@@ -264,7 +241,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !bytes.Equal(pHash, userData.passwordHash) {
-			//if pHash != userData.passwordHash {
 			fmt.Printf("User '%v' exists, but wrong password.\n", user)
 			w.WriteHeader(http.StatusUnauthorized)
 			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
@@ -289,7 +265,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			expire:   sessionExpire,
 		}
 
-		fmt.Printf("New session for user '%v' and uuid: '%v'\n", user, sessionToken)
+		fmt.Printf("New session for user '%v'\n", user)
 
 		http.SetCookie(w, &http.Cookie{
 			Name:     "session_token",
@@ -304,7 +280,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		// User authenticated and everything is OK
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusOK)
-		//http.Redirect(w, r, "/overview", http.StatusSeeOther)
 	}
 }
 
@@ -422,9 +397,6 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		mu.Lock()
-		defer mu.Unlock()
-
 		if r.Header.Get("HX-Request") == "true" {
 			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateWish{
 				Index: idx,
@@ -441,8 +413,6 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 func addLinkHandler(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		mu.Lock()
-		defer mu.Unlock()
 
 		if r.Header.Get("HX-Request") == "true" {
 			if err := templateWishlist.ExecuteTemplate(w, "link", ""); err != nil {
@@ -456,8 +426,6 @@ func addLinkHandler(w http.ResponseWriter, r *http.Request) {
 
 func loginPageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
-		mu.Lock()
-		defer mu.Unlock()
 
 		if r.Header.Get("HX-Request") == "true" {
 			if err := templateWishlist.ExecuteTemplate(w, "login", nil); err != nil {
@@ -557,7 +525,6 @@ func main() {
 	http.HandleFunc("/landingpage", landingpageHandler)
 	http.HandleFunc("/overview", overviewHandler)
 	http.HandleFunc("/wishlist/{id}", wishlistHandler)
-
 	http.HandleFunc("/reserve/{id}", reserveWishHandler)
 	http.HandleFunc("/new", newItemHandler)
 	http.HandleFunc("/item/{id}", itemHandler)
@@ -568,5 +535,7 @@ func main() {
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/loginpage", loginPageHandler)
 	http.HandleFunc("/logout", logoutHandler)
+
+	http.HandleFunc("readwishlist/{id}", readonlyWishlistHandler)
 	http.ListenAndServe(":8080", nil)
 }
