@@ -53,12 +53,18 @@ type Wish struct {
 
 type Wishlist struct {
 	Title  string
+	UUID   string
 	Wishes []Wish
 }
 
 type userdata struct {
 	passwordHash []byte
 	Wishlists    []Wishlist
+}
+
+type shortcut struct {
+	user          string
+	wishlistIndex int
 }
 
 var (
@@ -68,6 +74,9 @@ var (
 
 	users    = map[string]userdata{}
 	sessions = map[string]session{}
+	// Shortcuts are references from wishlist uuids to the user/index of the wishlist.
+	// This avoids iterating all users/wishlists when searching for a specific one.
+	shortcuts = map[string]shortcut{}
 
 	funcMap          = template.FuncMap{"newButton": newButton}
 	templateWishlist = template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/wishlist.html"))
@@ -176,14 +185,31 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// checkWishlistUUID checks if the uuid corresponds to a valid user and wishlist index.
+func checkWishlistUUID(uuid string) bool {
+	if sc, ok := shortcuts[uuid]; ok {
+		if user, ok := users[sc.user]; ok {
+			return sc.wishlistIndex < len(user.Wishlists)
+		}
+	}
+	return false
+}
+
 func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
-		idx := parseId(r.PathValue("id"))
+		uuid := r.PathValue("uuid")
+		if !checkWishlistUUID(uuid) {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+
+		sc := shortcuts[uuid]
+		wishlist := users[sc.user].Wishlists[sc.wishlistIndex]
 
 		data := TemplateAll{
-			Title:         users[user].Wishlists[idx].Title,
-			Wishlist:      users[user].Wishlists[idx].Wishes,
+			Title:         wishlist.Title,
+			Wishlist:      wishlist.Wishes,
 			Authenticated: ok,
 			Username:      user,
 		}
@@ -494,8 +520,14 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
+	err, mUUID := newUUID()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	mWishlist := Wishlist{
 		Title: "Wunschliste",
+		UUID:  mUUID,
 		Wishes: []Wish{
 			{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
 			{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
@@ -504,8 +536,14 @@ func main() {
 	}
 	gold := "https://www.muenzeoesterreich.at/var/em_plain_site/storage/images/_aliases/product_full/media/bilder/produktbilder/1.anlegen/handelsgold_mtt/1fach-dukaten-av/9572-4-ger-DE/1fach-dukaten-av.png"
 	kinderwagen := "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fi.otto.de%2Fi%2Fotto%2F16455872-f2bb-5a61-bfb2-261f5713a79a%3Fh%26%2361%3B520%26amp%3Bw%2661%3B551%26amp%3Bsm%2661%3Bclamp&f=1&nofb=1&ipt=492a936d362bfd9dfa8095c11c15251238c529f986d731b49d66a8a3f162df81&ipo=images"
+	err, nUUID := newUUID()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	nWishlist := Wishlist{
 		Title: "Nadines Wunschliste",
+		UUID:  nUUID,
 		Wishes: []Wish{
 			{"Ganz viel Gold und Reichtum", "Oder so. Ich muss da nochmal nachfragen :)", []string{"gold.de"}, gold, false},
 			{"Ein Spaziergehpapabärchen", "Am liebsten jeden Morgen und nachmittags nochmal!", nil, kinderwagen, true},
@@ -521,21 +559,43 @@ func main() {
 		Wishlists:    []Wishlist{nWishlist},
 	}
 
+	shortcuts[mUUID] = shortcut{"Maurice", 0}
+	shortcuts[nUUID] = shortcut{"Nadine", 0}
+
+	// Shows /overview when logged in or /landingpage otherwise
 	http.HandleFunc("/", allHandler)
+	// Shows a generic landing page
 	http.HandleFunc("/landingpage", landingpageHandler)
+	// Shows all available wishlists
 	http.HandleFunc("/overview", overviewHandler)
-	http.HandleFunc("/wishlist/{id}", wishlistHandler)
+	// Shows a specific wishlist
+	// TODO: Change from index to UUID!
+	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
+
+	// Reserves wish id of wishlist 0
 	http.HandleFunc("/reserve/{id}", reserveWishHandler)
+	// Creates a new wish in wishlist 0
 	http.HandleFunc("/new", newItemHandler)
+
+	// Show wish id of wishlist 0
 	http.HandleFunc("/item/{id}", itemHandler)
+	// Delete wish id of wishlist 0
 	http.HandleFunc("/delete/{id}", deleteHandler)
+	// Show the edit-view of wish id of wishlist 0
 	http.HandleFunc("/edit/{id}", editHandler)
+	// Transfer all changes done in the edit of wish id in wishlist 0
 	http.HandleFunc("/edit/{id}/done", editDoneHandler)
+	// Add a new link in the current wish edit. This does not need to correspond to a specific wish and
+	// will just extend the edit view by a new link field.
 	http.HandleFunc("/addlink", addLinkHandler)
-	http.HandleFunc("/login", loginHandler)
+
+	// Shows a generic login page
 	http.HandleFunc("/loginpage", loginPageHandler)
+	// Handle user login with user/password provided
+	http.HandleFunc("/login", loginHandler)
+	// Handle logout of an active session
 	http.HandleFunc("/logout", logoutHandler)
 
-	http.HandleFunc("readwishlist/{id}", readonlyWishlistHandler)
+	//http.HandleFunc("readwishlist/{id}", readonlyWishlistHandler)
 	http.ListenAndServe(":8080", nil)
 }
