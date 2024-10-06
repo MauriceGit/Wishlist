@@ -589,6 +589,11 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	err, mUUID2 := newUUID()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	mWishlist := Wishlist{
 		Title: "Wunschliste",
 		UUID:  mUUID,
@@ -596,6 +601,13 @@ func main() {
 			{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
 			{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
 			{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
+		},
+	}
+	mWishlist2 := Wishlist{
+		Title: "Geburtstags-Wunschliste",
+		UUID:  mUUID2,
+		Wishes: []Wish{
+			{"A new webcam", "I just thought of the Logitech Brio 500...", []string{"https://www.amazon.de/dp/B07W5JKKFJ"}, "", false},
 		},
 	}
 	gold := "https://www.muenzeoesterreich.at/var/em_plain_site/storage/images/_aliases/product_full/media/bilder/produktbilder/1.anlegen/handelsgold_mtt/1fach-dukaten-av/9572-4-ger-DE/1fach-dukaten-av.png"
@@ -616,7 +628,7 @@ func main() {
 	}
 	users["Maurice"] = userdata{
 		passwordHash: hashPassword("Maurice", "passwort"),
-		Wishlists:    []Wishlist{mWishlist},
+		Wishlists:    []Wishlist{mWishlist, mWishlist2},
 	}
 	users["Nadine"] = userdata{
 		passwordHash: hashPassword("Nadine", "passwort"),
@@ -624,6 +636,7 @@ func main() {
 	}
 
 	shortcuts[mUUID] = shortcut{"Maurice", 0}
+	shortcuts[mUUID2] = shortcut{"Maurice", 1}
 	shortcuts[nUUID] = shortcut{"Nadine", 0}
 
 	// Shows /overview when logged in or /landingpage otherwise

@@ -223,7 +223,7 @@
         {{range .Wishlists}}
             <a href="/wishlist/{{.UUID}}" hx-get="/wishlist/{{.UUID}}" hx-target="#main-content" hx-swap="innerHTML" class="block p-6 bg-white rounded-lg shadow hover:bg-pink-100 transition duration-300 ease-in-out">
                 <h2 class="text-2xl font-bold text-pink-700 mb-2">{{.Title}}</h2>
-                <p class="text-gray-700">{{len .Wishes}} Wishes</p>
+                <p class="text-gray-700">{{len .Wishes}} Wünsche</p>
             </a>
         {{end}}
     </div>
