@@ -32,6 +32,7 @@ type TemplateAll struct {
 	Wishlist      []Wish
 	Authenticated bool
 	Username      string
+	UUID          string
 }
 
 // ======================== Session Data
@@ -95,7 +96,7 @@ func (wish Wish) BundleIndex(index int) TemplateWish {
 	return TemplateWish{index, wish}
 }
 
-func parseId(id string) int {
+func parseIndex(id string) int {
 	idx, err := strconv.Atoi(id)
 	if err != nil {
 		fmt.Printf("Parsing the id '%v' results in err '%v'\n", id, err)
@@ -114,8 +115,6 @@ func checkAuthentication(r *http.Request) (string, bool, int) {
 		return "", false, http.StatusBadRequest
 	}
 	sessionToken := c.Value
-
-	fmt.Printf("Check session with token: '%v'\n", sessionToken)
 
 	session, ok := sessions[sessionToken]
 	if !ok {
@@ -185,11 +184,11 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// checkWishlistUUID checks if the uuid corresponds to a valid user and wishlist index.
+// checkWishlistUUID checks if the uuid corresponds to a valid user and there exists a wishlist with the identical uuid!
 func checkWishlistUUID(uuid string) bool {
 	if sc, ok := shortcuts[uuid]; ok {
 		if user, ok := users[sc.user]; ok {
-			return sc.wishlistIndex < len(user.Wishlists)
+			return sc.wishlistIndex < len(user.Wishlists) && user.Wishlists[sc.wishlistIndex].UUID == uuid
 		}
 	}
 	return false
@@ -199,7 +198,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
 		uuid := r.PathValue("uuid")
-		if !checkWishlistUUID(uuid) {
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
 			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
 			return
 		}
@@ -212,6 +211,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 			Wishlist:      wishlist.Wishes,
 			Authenticated: ok,
 			Username:      user,
+			UUID:          uuid,
 		}
 
 		if err := templateWishlist.ExecuteTemplate(w, "wishlist", data); err != nil {
@@ -359,39 +359,61 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
-		idx := parseId(r.PathValue("id"))
+		idx := parseIndex(r.PathValue("idx"))
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
 			return
 		}
 
+		uuid := r.FormValue("wishlist-uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+		fmt.Printf("Reserve wish %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+
 		mu.Lock()
 		defer mu.Unlock()
 
 		reserve := r.FormValue("reserve") == "true"
-		users[user].Wishlists[0].Wishes[idx].Reserved = reserve
+		wlIndex := shortcuts[uuid].wishlistIndex
+		users[user].Wishlists[wlIndex].Wishes[idx].Reserved = reserve
 
-		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[0].Wishes[idx])
+		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[wlIndex].Wishes[idx])
 	}
 }
 
 func deleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Delete an item!
-	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodDelete {
-		idx := parseId(r.PathValue("id"))
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPut {
+		idx := parseIndex(r.PathValue("idx"))
 
-		// possibly a cancel on a newly created item. Lets just return nothing instead!
-		if idx < 0 {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Unable to parse form", http.StatusBadRequest)
 			return
 		}
+
+		uuid := r.FormValue("wishlist-uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+
+		wlIndex := shortcuts[uuid].wishlistIndex
+		// possibly a cancel on a newly created item. Lets just return nothing instead!
+		if idx < 0 || idx >= len(users[user].Wishlists[wlIndex].Wishes) {
+			return
+		}
+
+		fmt.Printf("Delete wish %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
 
 		mu.Lock()
 		defer mu.Unlock()
 
-		wishlist := users[user].Wishlists[0].Wishes
-		users[user].Wishlists[0].Wishes = append(wishlist[:idx], wishlist[idx+1:]...)
+		wishlist := users[user].Wishlists[wlIndex].Wishes
+		users[user].Wishlists[wlIndex].Wishes = append(wishlist[:idx], wishlist[idx+1:]...)
 
 		// Return nothing. That should just remove the currently edited item!
 	}
@@ -400,17 +422,29 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 func itemHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"))
+		idx := parseIndex(r.PathValue("idx"))
 
 		// possibly a cancel on a newly created item. Lets just return nothing instead!
 		if idx == -1 {
 			return
 		}
 
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Unable to parse form", http.StatusBadRequest)
+			return
+		}
+
+		uuid := r.FormValue("wishlist-uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+		fmt.Printf("Show item %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+
 		mu.Lock()
 		defer mu.Unlock()
-
-		wish := users[user].Wishlists[0].Wishes[idx]
+		wlIndex := shortcuts[uuid].wishlistIndex
+		wish := users[user].Wishlists[wlIndex].Wishes[idx]
 		writeTemplateWish(w, r, "wish-item", idx, wish)
 	}
 }
@@ -418,15 +452,28 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 func editHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		idx := parseId(r.PathValue("id"))
+		idx := parseIndex(r.PathValue("idx"))
 		if idx < 0 {
 			return
 		}
 
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Unable to parse form", http.StatusBadRequest)
+			return
+		}
+
+		uuid := r.FormValue("wishlist-uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+		fmt.Printf("Show the edit of item %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+
 		if r.Header.Get("HX-Request") == "true" {
+			wlIndex := shortcuts[uuid].wishlistIndex
 			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateWish{
 				Index: idx,
-				Wish:  users[user].Wishlists[0].Wishes[idx],
+				Wish:  users[user].Wishlists[wlIndex].Wishes[idx],
 			}); err != nil {
 				fmt.Println(err)
 			}
@@ -485,20 +532,28 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPost {
-		idx := parseId(r.PathValue("id"))
+		idx := parseIndex(r.PathValue("idx"))
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
 			return
 		}
 
+		uuid := r.FormValue("wishlist-uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+		fmt.Printf("Editing Done for item %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+
 		mu.Lock()
 		defer mu.Unlock()
 
+		wlIndex := shortcuts[uuid].wishlistIndex
 		// A new item was added!
 		if idx == -1 {
-			users[user].Wishlists[0].Wishes = append(users[user].Wishlists[0].Wishes, Wish{"", "", nil, "", false})
-			idx = len(users[user].Wishlists[0].Wishes) - 1
+			users[user].Wishlists[wlIndex].Wishes = append(users[user].Wishlists[wlIndex].Wishes, Wish{"", "", nil, "", false})
+			idx = len(users[user].Wishlists[wlIndex].Wishes) - 1
 		}
 
 		// filter empty links
@@ -509,12 +564,21 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		users[user].Wishlists[0].Wishes[idx].Name = r.FormValue("name")
-		users[user].Wishlists[0].Wishes[idx].Description = r.FormValue("description")
-		users[user].Wishlists[0].Wishes[idx].Links = links
-		users[user].Wishlists[0].Wishes[idx].ImageUrl = r.FormValue("imageUrl")
+		/*
+			users[user].Wishlists[wlIndex].Wishes[idx].Name = r.FormValue("name")
+			users[user].Wishlists[wlIndex].Wishes[idx].Description = r.FormValue("description")
+			users[user].Wishlists[wlIndex].Wishes[idx].Links = links
+			users[user].Wishlists[wlIndex].Wishes[idx].ImageUrl = r.FormValue("imageUrl")
+		*/
 
-		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[0].Wishes[idx])
+		users[user].Wishlists[wlIndex].Wishes[idx] = Wish{
+			Name:        r.FormValue("name"),
+			Description: r.FormValue("description"),
+			Links:       links,
+			ImageUrl:    r.FormValue("imageUrl"),
+		}
+
+		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[wlIndex].Wishes[idx])
 	}
 }
 
@@ -569,22 +633,21 @@ func main() {
 	// Shows all available wishlists
 	http.HandleFunc("/overview", overviewHandler)
 	// Shows a specific wishlist
-	// TODO: Change from index to UUID!
 	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
 
-	// Reserves wish id of wishlist 0
-	http.HandleFunc("/reserve/{id}", reserveWishHandler)
-	// Creates a new wish in wishlist 0
+	// Reserves a wish given the wishlist uuid and wish index
+	http.HandleFunc("/reserve/{idx}", reserveWishHandler)
+	// Creates a new wish. This is just an extended frontend view and will not change any data in the backend.
 	http.HandleFunc("/new", newItemHandler)
 
-	// Show wish id of wishlist 0
-	http.HandleFunc("/item/{id}", itemHandler)
-	// Delete wish id of wishlist 0
-	http.HandleFunc("/delete/{id}", deleteHandler)
-	// Show the edit-view of wish id of wishlist 0
-	http.HandleFunc("/edit/{id}", editHandler)
-	// Transfer all changes done in the edit of wish id in wishlist 0
-	http.HandleFunc("/edit/{id}/done", editDoneHandler)
+	// Show wish idx of wishlist with a given uuid
+	http.HandleFunc("/item/{idx}", itemHandler)
+	// Delete wish idx of wishlist with a given uuid
+	http.HandleFunc("/delete/{idx}", deleteHandler)
+	// Show the edit-view of wish idx of wishlist with a given uuid
+	http.HandleFunc("/edit/{idx}", editHandler)
+	// Transfer all changes done in the edit of wish idx in wishlist of a given uuid
+	http.HandleFunc("/edit/{idx}/done", editDoneHandler)
 	// Add a new link in the current wish edit. This does not need to correspond to a specific wish and
 	// will just extend the edit view by a new link field.
 	http.HandleFunc("/addlink", addLinkHandler)

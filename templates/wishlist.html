@@ -17,7 +17,7 @@
 {{end}}
 
 {{define "wish-edit"}}
-<form hx-post="/edit/{{.Index}}/done" hx-target="this" hx-swap="outerHTML" class="bg-white p-6 shadow-md rounded-lg">
+<form hx-post="/edit/{{.Index}}/done" hx-include="[name='wishlist-uuid']" hx-target="this" hx-swap="outerHTML" class="bg-white p-6 shadow-md rounded-lg">
     <div class="flex flex-col gap-4">
 
         <!-- Name Input -->
@@ -59,10 +59,14 @@
                 OK
             </button>
             <!-- Cancel Button -->
-            <button type="button" hx-get="/item/{{.Index}}" class="px-6 py-2 bg-gray-400 hover:bg-gray-500 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+            <button type="button" hx-get="/item/{{.Index}}" hx-include="[name='wishlist-uuid']" class="px-6 py-2 bg-gray-400 hover:bg-gray-500 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
                 Cancel
             </button>
-            <button type="button" hx-delete="/delete/{{.Index}}" hx-confirm="Are you sure you wish to delete the wish?" class="px-6 py-2 bg-red-400 hover:bg-red-500 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+            <!-- Delete Button - I have to use hx-put because hx-delete will not send the wishlist-uuid as a formValue... -->
+            <button type="button" hx-put="/delete/{{.Index}}"
+                    hx-include="[name='wishlist-uuid']"
+                    hx-confirm="Are you sure you wish to delete the wish?"
+                    class="px-6 py-2 bg-red-400 hover:bg-red-500 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
                 Delete
             </button>
         </div>
@@ -106,14 +110,14 @@
 
     <!-- Buttons remain next to each other using flex and space-x-2 -->
     <div class="flex space-x-2 flex-shrink-0">
-        <button {{if .Wish.Reserved}} disabled {{else}} hx-get="/edit/{{.Index}}" {{end}} class="px-3 py-1 w-12 bg-amber-300 text-white rounded hover:bg-amber-400 {{if .Wish.Reserved}} opacity-50 cursor-not-allowed {{end}}">
+        <button {{if .Wish.Reserved}} disabled {{else}} hx-get="/edit/{{.Index}}" hx-include="[name='wishlist-uuid']" {{end}} class="px-3 py-1 w-12 bg-amber-300 text-white rounded hover:bg-amber-400 {{if .Wish.Reserved}} opacity-50 cursor-not-allowed {{end}}">
             <!-- Edit -->
             <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
               <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.304 4.844 2.852 2.852M7 7H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4.5m2.409-9.91a2.017 2.017 0 0 1 0 2.853l-6.844 6.844L8 14l.713-3.565 6.844-6.844a2.015 2.015 0 0 1 2.852 0Z"/>
             </svg>
         </button>
 
-        <button hx-get="/reserve/{{.Index}}" hx-vals='{"reserve": {{if .Wish.Reserved}} false {{else}} true {{end}}}' class="px-3 py-1 w-12 bg-lime-500 hover:bg-lime-600 text-white rounded">
+        <button hx-get="/reserve/{{.Index}}" hx-vals='{"reserve": {{if .Wish.Reserved}} false {{else}} true {{end}}}' hx-include="[name='wishlist-uuid']" class="px-3 py-1 w-12 bg-lime-500 hover:bg-lime-600 text-white rounded">
             {{if .Wish.Reserved}}
                 <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                   <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h1.5L9 16m0 0h8m-8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-8.5-3h9.25L19 7H7.312"/>
@@ -159,6 +163,7 @@
         {{range $index, $wish := .Wishlist}}
             {{template "wish-item" (.BundleIndex $index)}}
         {{end}}
+        <input name="wishlist-uuid" value="{{.UUID}}" class="hidden">
 
         {{template "plus-button" (newButton "/new" "bg-blue-400" "bg-blue-500" "end")}}
     </div>
@@ -214,14 +219,14 @@
     <h1 class="text-3xl font-bold text-center mb-8">Meine Wunschlisten</h1>
 
     <!-- Grid container for wishlist cards -->
-        <div class="grid gap-6 lg:grid-cols-2 md:grid-cols-2 sm:grid-cols-1">
-            {{range .Wishlists}}
-                <a href="/wishlist/{{.UUID}}" hx-get="/wishlist/{{.UUID}}" hx-target="#main-content" hx-swap="innerHTML" class="block p-6 bg-white rounded-lg shadow hover:bg-pink-100 transition duration-300 ease-in-out">
-                    <h2 class="text-2xl font-bold text-pink-700 mb-2">{{.Title}}</h2>
-                    <p class="text-gray-700">{{len .Wishes}} Wishes</p>
-                </a>
-            {{end}}
-        </div>
+    <div class="grid gap-6 lg:grid-cols-2 md:grid-cols-2 sm:grid-cols-1">
+        {{range .Wishlists}}
+            <a href="/wishlist/{{.UUID}}" hx-get="/wishlist/{{.UUID}}" hx-target="#main-content" hx-swap="innerHTML" class="block p-6 bg-white rounded-lg shadow hover:bg-pink-100 transition duration-300 ease-in-out">
+                <h2 class="text-2xl font-bold text-pink-700 mb-2">{{.Title}}</h2>
+                <p class="text-gray-700">{{len .Wishes}} Wishes</p>
+            </a>
+        {{end}}
+    </div>
     </div>
 </div>
 {{end}}
