@@ -27,14 +27,6 @@ type TemplateWish struct {
 	Wish  Wish
 }
 
-type TemplateAll struct {
-	Title         string
-	Wishlist      []Wish
-	Authenticated bool
-	Username      string
-	UUID          string
-}
-
 // ======================== Session Data
 
 type session struct {
@@ -79,8 +71,24 @@ var (
 	// This avoids iterating all users/wishlists when searching for a specific one.
 	shortcuts = map[string]shortcut{}
 
-	funcMap          = template.FuncMap{"newButton": newButton}
-	templateWishlist = template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/wishlist.html"))
+	funcMap = template.FuncMap{"newButton": newButton}
+	/*
+		templateWishlist = template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
+			"templates/main.html",
+			"templates/landing-page.html",
+			"templates/overview.html",
+			"templates/wishlist.html",
+		))
+	*/
+
+	tmplFullLandingpage = template.Must(template.ParseFiles("templates/main.html", "templates/landing-page.html"))
+	tmplFullOverview    = template.Must(template.ParseFiles("templates/main.html", "templates/overview.html"))
+	tmplFullWishlist    = template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
+		"templates/main.html", "templates/wishlist.html", "templates/other.html",
+	))
+	tmplOther = template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
+		"templates/other.html",
+	))
 )
 
 func (s *session) isExpired() bool {
@@ -147,7 +155,7 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	user, ok, _ := checkAuthentication(r)
+	user, authenticated, _ := checkAuthentication(r)
 
 	data := struct {
 		Wishlists     []Wishlist
@@ -155,15 +163,50 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 		Username      string
 	}{
 		Wishlists:     nil,
-		Authenticated: ok,
+		Authenticated: authenticated,
 		Username:      user,
 	}
 
-	if ok {
-		data.Wishlists = users[user].Wishlists
+	uuid := r.PathValue("uuid")
+	// We do not check the user or run authentication here because this page can be opened without being logged in.
+	uuidOK := checkWishlistUUID(uuid)
+
+	// If we only show one wishlist, it doesn't matter if the user is authenticated or not!
+	if uuidOK {
+		sc := shortcuts[uuid]
+		wishlist := users[sc.user].Wishlists[sc.wishlistIndex]
+
+		data := struct {
+			Title         string
+			UUID          string
+			Wishes        []Wish
+			Authenticated bool
+			Username      string
+		}{
+			Title:         wishlist.Title,
+			UUID:          wishlist.UUID,
+			Wishes:        wishlist.Wishes,
+			Authenticated: authenticated,
+			Username:      user,
+		}
+
+		if err := tmplFullWishlist.ExecuteTemplate(w, "all", data); err != nil {
+			fmt.Println(err)
+		}
+		return
 	}
 
-	if err := templateWishlist.ExecuteTemplate(w, "all", data); err != nil {
+	// Authenticated users get the wishlist overview
+	if authenticated {
+		data.Wishlists = users[user].Wishlists
+		if err := tmplFullOverview.ExecuteTemplate(w, "all", data); err != nil {
+			fmt.Println(err)
+		}
+		return
+	}
+
+	// For all other cases, just show the landing page!
+	if err := tmplFullLandingpage.ExecuteTemplate(w, "all", data); err != nil {
 		fmt.Println(err)
 	}
 }
@@ -171,14 +214,14 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 // landingPageHandler handles the landing page. If the user is not authenticated, it will show the login screen.
 // otherwise it will show the users wishlists.
 func landingpageHandler(w http.ResponseWriter, r *http.Request) {
-	if err := templateWishlist.ExecuteTemplate(w, "landing-page", nil); err != nil {
+	if err := tmplFullLandingpage.ExecuteTemplate(w, "content", nil); err != nil {
 		fmt.Println(err)
 	}
 }
 
 func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		if err := templateWishlist.ExecuteTemplate(w, "overview", users[user]); err != nil {
+		if err := tmplFullOverview.ExecuteTemplate(w, "content", users[user]); err != nil {
 			fmt.Println(err)
 		}
 	}
@@ -195,6 +238,7 @@ func checkWishlistUUID(uuid string) bool {
 }
 
 func wishlistHandler(w http.ResponseWriter, r *http.Request) {
+
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
 		uuid := r.PathValue("uuid")
@@ -206,15 +250,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 		sc := shortcuts[uuid]
 		wishlist := users[sc.user].Wishlists[sc.wishlistIndex]
 
-		data := TemplateAll{
-			Title:         wishlist.Title,
-			Wishlist:      wishlist.Wishes,
-			Authenticated: ok,
-			Username:      user,
-			UUID:          uuid,
-		}
-
-		if err := templateWishlist.ExecuteTemplate(w, "wishlist", data); err != nil {
+		if err := tmplFullWishlist.ExecuteTemplate(w, "content", wishlist); err != nil {
 			fmt.Println(err)
 		}
 	}
@@ -246,7 +282,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
-			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -260,7 +296,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			fmt.Printf("User '%v' does not exist.\n", user)
 			w.WriteHeader(http.StatusOK)
-			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -269,7 +305,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		if !bytes.Equal(pHash, userData.passwordHash) {
 			fmt.Printf("User '%v' exists, but wrong password.\n", user)
 			w.WriteHeader(http.StatusUnauthorized)
-			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -279,7 +315,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			fmt.Printf("Error when generating a new uuid: %v\n", err)
 			w.WriteHeader(http.StatusUnauthorized)
-			if err := templateWishlist.ExecuteTemplate(w, "login-error", nil); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -343,7 +379,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int, wish Wish) {
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := templateWishlist.ExecuteTemplate(w, template, TemplateWish{
+		if err := tmplOther.ExecuteTemplate(w, template, TemplateWish{
 			Index: idx,
 			Wish:  wish,
 		}); err != nil {
@@ -471,7 +507,7 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 
 		if r.Header.Get("HX-Request") == "true" {
 			wlIndex := shortcuts[uuid].wishlistIndex
-			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", TemplateWish{
+			if err := tmplOther.ExecuteTemplate(w, "wish-edit", TemplateWish{
 				Index: idx,
 				Wish:  users[user].Wishlists[wlIndex].Wishes[idx],
 			}); err != nil {
@@ -488,7 +524,7 @@ func addLinkHandler(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "link", ""); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "link", ""); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -501,7 +537,7 @@ func loginPageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "login", nil); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "login", nil); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -520,7 +556,7 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := templateWishlist.ExecuteTemplate(w, "wish-edit", data); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "wish-edit", data); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -641,6 +677,7 @@ func main() {
 
 	// Shows /overview when logged in or /landingpage otherwise
 	http.HandleFunc("/", allHandler)
+	http.HandleFunc("/{uuid}", allHandler)
 	// Shows a generic landing page
 	http.HandleFunc("/landingpage", landingpageHandler)
 	// Shows all available wishlists

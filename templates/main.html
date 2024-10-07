@@ -1,0 +1,75 @@
+
+{{define "all"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wishlist</title>
+    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tailwindcss-cdn@3.4.10/tailwindcss.js"></script>
+    <script>
+        function toggleMenu() {
+            var menu = document.getElementById("mobile-menu");
+            menu.classList.toggle("hidden");
+        }
+    </script>
+</head>
+<body class="bg-gray-100">
+
+    <nav class="flex items-center justify-between flex-wrap bg-pink-700 p-6">
+        <div class="flex items-center flex-shrink-0 text-white mr-6">
+            <!--<svg class="fill-current h-8 w-8 mr-2" width="54" height="54" viewBox="0 0 54 54" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13.5 22.1c1.8-7.2 6.3-10.8 13.5-10.8 10.8 0 12.15 8.1 17.55 9.45 3.6.9 6.75-.45 9.45-4.05-1.8 7.2-6.3 10.8-13.5 10.8-10.8 0-12.15-8.1-17.55-9.45-3.6-.9-6.75.45-9.45 4.05zM0 38.3c1.8-7.2 6.3-10.8 13.5-10.8 10.8 0 12.15 8.1 17.55 9.45 3.6.9 6.75-.45 9.45-4.05-1.8 7.2-6.3 10.8-13.5 10.8-10.8 0-12.15-8.1-17.55-9.45-3.6-.9-6.75.45-9.45 4.05z"/>
+            </svg>-->
+            <a href="/landingpage" hx-get="/landingpage" hx-target="#main-content" hx-swap="innerHTML" class="font-semibold text-3xl tracking-tight">Wünsche Ahoi</a>
+        </div>
+        <div class="block lg:hidden">
+            <button onclick="toggleMenu()" class="flex items-center px-3 py-2 border rounded text-purple-100 border-purple-200 hover:text-white hover:border-white">
+                <svg class="fill-current h-3 w-3" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                    <title>Menu</title>
+                    <path d="M0 3h20v2H0V3zm0 6h20v2H0V9zm0 6h20v2H0v-2z"/>
+                </svg>
+            </button>
+        </div>
+        <div id="mobile-menu" class="w-full block flex-grow lg:flex lg:items-center lg:w-auto hidden lg:block">
+            <div class="text-xl lg:flex-grow">
+                <a href="/overview" hx-get="/overview" hx-target="#main-content" hx-swap="innerHTML" class="block mt-4 lg:inline-block lg:mt-0 text-purple-100 hover:text-white mr-4">
+                    Meine Wunschlisten
+                </a>
+                <a class="block mt-4 lg:inline-block lg:mt-0 text-purple-100 hover:text-white mr-4">
+                    Reservierte Wünsche
+                </a>
+            </div>
+
+            {{$page := "/loginpage"}}
+            {{if .Authenticated}}
+                {{$page = "/logout"}}
+            {{end}}
+            <div class="flex flex-col lg:flex-row lg:items-center lg:space-x-4 mt-4 lg:mt-0">
+                <a href="{{$page}}" hx-get="{{$page}}" hx-target="#main-content" hx-swap="innerHTML" class="text-xl lg:inline-block text-purple-100 hover:text-white">
+                    {{if .Authenticated}}
+                        Logout ({{.Username}})
+                    {{else}}
+                        Login
+                    {{end}}
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div id="main-content">
+        <!-- Placeholder for page-specific content like the landing-page, overview or a specific wishlist -->
+        {{block "content" .}} {{end}}
+        {{/*}}
+            {{if .Authenticated}}
+                {{template "overview" .}}
+            {{else}}
+                {{template "landing-page"}}
+            {{end}}
+        {{*/}}
+    </div>
+
+</body>
+</html>
+{{end}}
