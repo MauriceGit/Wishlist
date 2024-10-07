@@ -113,6 +113,24 @@ func parseIndex(id string) int {
 	return idx
 }
 
+// https://stackoverflow.com/questions/15130321/is-there-a-method-to-generate-a-uuid-with-go-language
+func newUUID() (error, string) {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return err, ""
+	}
+	return nil, fmt.Sprintf("%X", b)
+}
+
+func hashPassword(user, password string) []byte {
+	h := sha256.New()
+	h.Write([]byte(password))
+	h.Write([]byte(user))
+	return h.Sum(nil)
+}
+
 // checkAuthentication checks, if the user is currently logged in and returns the username.
 func checkAuthentication(r *http.Request) (string, bool, int) {
 	c, err := r.Cookie("session_token")
@@ -256,24 +274,6 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// https://stackoverflow.com/questions/15130321/is-there-a-method-to-generate-a-uuid-with-go-language
-func newUUID() (error, string) {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		fmt.Println("Error: ", err)
-		return err, ""
-	}
-	return nil, fmt.Sprintf("%X", b)
-}
-
-func hashPassword(user, password string) []byte {
-	h := sha256.New()
-	h.Write([]byte(password))
-	h.Write([]byte(user))
-	return h.Sum(nil)
-}
-
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
@@ -393,7 +393,9 @@ func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, 
 // Handler to toggle todo item
 func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 
-	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+	if r.Method == http.MethodGet {
+
+		user, _, _ := checkAuthentication(r)
 
 		idx := parseIndex(r.PathValue("idx"))
 
@@ -403,20 +405,23 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		uuid := r.FormValue("wishlist-uuid")
-		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+		// Everyone (even not logged in) can reserve wishes. So no need to check against the user!
+		if !checkWishlistUUID(uuid) {
 			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
 			return
 		}
-		fmt.Printf("Reserve wish %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+
+		wlUser := shortcuts[uuid].user
+		fmt.Printf("Reserve wish %v for user '%v' and wishlist with uuid: %v by user '%v'\n", idx, wlUser, uuid, user)
 
 		mu.Lock()
 		defer mu.Unlock()
 
 		reserve := r.FormValue("reserve") == "true"
 		wlIndex := shortcuts[uuid].wishlistIndex
-		users[user].Wishlists[wlIndex].Wishes[idx].Reserved = reserve
+		users[wlUser].Wishlists[wlIndex].Wishes[idx].Reserved = reserve
 
-		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[wlIndex].Wishes[idx])
+		writeTemplateWish(w, r, "wish-item", idx, users[wlUser].Wishlists[wlIndex].Wishes[idx])
 	}
 }
 
