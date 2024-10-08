@@ -23,8 +23,9 @@ type Button struct {
 }
 
 type TemplateWish struct {
-	Index int
-	Wish  Wish
+	Index     int
+	Wish      Wish
+	IsCreator bool
 }
 
 // ======================== Session Data
@@ -72,14 +73,6 @@ var (
 	shortcuts = map[string]shortcut{}
 
 	funcMap = template.FuncMap{"newButton": newButton}
-	/*
-		templateWishlist = template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
-			"templates/main.html",
-			"templates/landing-page.html",
-			"templates/overview.html",
-			"templates/wishlist.html",
-		))
-	*/
 
 	tmplFullLandingpage = template.Must(template.ParseFiles("templates/main.html", "templates/landing-page.html"))
 	tmplFullOverview    = template.Must(template.ParseFiles("templates/main.html", "templates/overview.html"))
@@ -100,8 +93,8 @@ func newButton(link, color, colorHighlight, side string) Button {
 }
 
 // This function will be used in the html/template to provide both wish and current index to the sub-template!
-func (wish Wish) BundleIndex(index int) TemplateWish {
-	return TemplateWish{index, wish}
+func (wish Wish) BundleIndex(index int, isCreator bool) TemplateWish {
+	return TemplateWish{index, wish, isCreator}
 }
 
 func parseIndex(id string) int {
@@ -200,12 +193,14 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 			Wishes        []Wish
 			Authenticated bool
 			Username      string
+			IsCreator     bool
 		}{
 			Title:         wishlist.Title,
 			UUID:          wishlist.UUID,
 			Wishes:        wishlist.Wishes,
 			Authenticated: authenticated,
 			Username:      user,
+			IsCreator:     user == sc.user,
 		}
 
 		if err := tmplFullWishlist.ExecuteTemplate(w, "all", data); err != nil {
@@ -268,7 +263,19 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 		sc := shortcuts[uuid]
 		wishlist := users[sc.user].Wishlists[sc.wishlistIndex]
 
-		if err := tmplFullWishlist.ExecuteTemplate(w, "content", wishlist); err != nil {
+		data := struct {
+			Title     string
+			UUID      string
+			Wishes    []Wish
+			IsCreator bool
+		}{
+			Title:     wishlist.Title,
+			UUID:      wishlist.UUID,
+			Wishes:    wishlist.Wishes,
+			IsCreator: user == sc.user,
+		}
+
+		if err := tmplFullWishlist.ExecuteTemplate(w, "content", data); err != nil {
 			fmt.Println(err)
 		}
 	}
@@ -376,12 +383,13 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int, wish Wish) {
+func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, idx int, wish Wish, isCreator bool) {
 
 	if r.Header.Get("HX-Request") == "true" {
 		if err := tmplOther.ExecuteTemplate(w, template, TemplateWish{
-			Index: idx,
-			Wish:  wish,
+			Index:     idx,
+			Wish:      wish,
+			IsCreator: isCreator,
 		}); err != nil {
 			fmt.Println(err)
 		}
@@ -421,7 +429,7 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 		wlIndex := shortcuts[uuid].wishlistIndex
 		users[wlUser].Wishlists[wlIndex].Wishes[idx].Reserved = reserve
 
-		writeTemplateWish(w, r, "wish-item", idx, users[wlUser].Wishlists[wlIndex].Wishes[idx])
+		writeTemplateWish(w, r, "wish-item", idx, users[wlUser].Wishlists[wlIndex].Wishes[idx], user == shortcuts[uuid].user)
 	}
 }
 
@@ -486,7 +494,7 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 		defer mu.Unlock()
 		wlIndex := shortcuts[uuid].wishlistIndex
 		wish := users[user].Wishlists[wlIndex].Wishes[idx]
-		writeTemplateWish(w, r, "wish-item", idx, wish)
+		writeTemplateWish(w, r, "wish-item", idx, wish, user == shortcuts[uuid].user)
 	}
 }
 
@@ -605,13 +613,6 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		/*
-			users[user].Wishlists[wlIndex].Wishes[idx].Name = r.FormValue("name")
-			users[user].Wishlists[wlIndex].Wishes[idx].Description = r.FormValue("description")
-			users[user].Wishlists[wlIndex].Wishes[idx].Links = links
-			users[user].Wishlists[wlIndex].Wishes[idx].ImageUrl = r.FormValue("imageUrl")
-		*/
-
 		users[user].Wishlists[wlIndex].Wishes[idx] = Wish{
 			Name:        r.FormValue("name"),
 			Description: r.FormValue("description"),
@@ -619,7 +620,7 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			ImageUrl:    r.FormValue("imageUrl"),
 		}
 
-		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[wlIndex].Wishes[idx])
+		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[wlIndex].Wishes[idx], user == shortcuts[uuid].user)
 	}
 }
 

@@ -75,12 +75,12 @@
 {{end}}
 
 {{define "wish-item"}}
-<div hx-target="this" hx-swap="outerHTML" class="break-all relative z-0 p-4 shadow-md rounded-lg flex justify-between items-start {{if .Wish.Reserved}} bg-gray-200 cursor-not-allowed {{else}} bg-white {{end}}">
+<div hx-target="this" hx-swap="outerHTML" class="break-all relative z-0 p-4 shadow-md rounded-lg flex justify-between items-start {{if and .Wish.Reserved (not .IsCreator)}} bg-gray-200 cursor-not-allowed {{else}} bg-white {{end}}">
 
     {{if .Wish.ImageUrl}} <img src="{{.Wish.ImageUrl}}" alt="Icon" class="w-8 h-8 mr-4 rounded-lg"> {{end}}
 
     <!-- Add a click event listener with plain JS to toggle the hidden class -->
-    <div onclick="toggleDetails(this)" class="flex flex-col items-start {{if .Wish.Reserved}} opacity-50 {{end}} flex-grow pr-5 pl-2">
+    <div onclick="toggleDetails(this)" class="flex flex-col items-start {{if and .Wish.Reserved (not .IsCreator)}} opacity-50 {{end}} flex-grow pr-5 pl-2">
         <div class="whitespace-normal font-bold">
             {{.Wish.Name}}
         </div>
@@ -110,28 +110,30 @@
 
     <!-- Buttons remain next to each other using flex and space-x-2 -->
     <div class="flex space-x-2 flex-shrink-0">
-        <button {{if .Wish.Reserved}} disabled {{else}} hx-get="/edit/{{.Index}}" hx-include="[name='wishlist-uuid']" {{end}} class="px-3 py-1 w-12 bg-amber-300 text-white rounded hover:bg-amber-400 {{if .Wish.Reserved}} opacity-50 cursor-not-allowed {{end}}">
-            <!-- Edit -->
-            <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-              <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.304 4.844 2.852 2.852M7 7H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4.5m2.409-9.91a2.017 2.017 0 0 1 0 2.853l-6.844 6.844L8 14l.713-3.565 6.844-6.844a2.015 2.015 0 0 1 2.852 0Z"/>
-            </svg>
-        </button>
-
-        <button hx-get="/reserve/{{.Index}}" hx-vals='{"reserve": {{if .Wish.Reserved}} false {{else}} true {{end}}}' hx-include="[name='wishlist-uuid']" class="px-3 py-1 w-12 bg-lime-500 hover:bg-lime-600 text-white rounded">
-            {{if .Wish.Reserved}}
+        {{if .IsCreator}}
+            <button {{if and .Wish.Reserved (not .IsCreator)}} disabled {{else}} hx-get="/edit/{{.Index}}" hx-include="[name='wishlist-uuid']" {{end}} class="px-3 py-1 w-12 bg-amber-300 text-white rounded hover:bg-amber-400 {{if and .Wish.Reserved (not .IsCreator)}} opacity-50 cursor-not-allowed {{end}}">
+                <!-- Edit -->
                 <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-                  <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h1.5L9 16m0 0h8m-8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-8.5-3h9.25L19 7H7.312"/>
+                  <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.304 4.844 2.852 2.852M7 7H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4.5m2.409-9.91a2.017 2.017 0 0 1 0 2.853l-6.844 6.844L8 14l.713-3.565 6.844-6.844a2.015 2.015 0 0 1 2.852 0Z"/>
                 </svg>
-            {{else}}
-                <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
-                  <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h1.5L9 16m0 0h8m-8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-8.5-3h9.25L19 7h-1M8 7h-.688M13 5v4m-2-2h4"/>
-                </svg>
-            {{end}}
-
-        </button>
+            </button>
+        {{end}}
+        {{if not .IsCreator}}
+            <button hx-get="/reserve/{{.Index}}" hx-vals='{"reserve": {{if .Wish.Reserved}} false {{else}} true {{end}}}' hx-include="[name='wishlist-uuid']" class="px-3 py-1 w-12 bg-lime-500 hover:bg-lime-600 text-white rounded">
+                {{if .Wish.Reserved}}
+                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                      <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h1.5L9 16m0 0h8m-8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-8.5-3h9.25L19 7H7.312"/>
+                    </svg>
+                {{else}}
+                    <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                      <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h1.5L9 16m0 0h8m-8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm-8.5-3h9.25L19 7h-1M8 7h-.688M13 5v4m-2-2h4"/>
+                    </svg>
+                {{end}}
+            </button>
+        {{end}}
     </div>
 
-    {{if .Wish.Reserved}}
+    {{if and .Wish.Reserved (not .IsCreator)}}
         <div class="absolute inset-y-0 left-0 z-10">
             <button>
                 <svg class="w-6 h-6 text-gray-800 dark:text-white fill-lime-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">

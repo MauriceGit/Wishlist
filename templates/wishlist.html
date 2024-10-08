@@ -2,11 +2,51 @@
 <div class="container mx-auto p-4">
     <h1 class="text-3xl font-bold mb-4 py-6">{{.Title}}</h1>
     <div class="grid grid-cols-1 gap-4">
+        {{$iscreator := .IsCreator}}
         {{range $index, $wish := .Wishes}}
-            {{template "wish-item" (.BundleIndex $index)}}
+            {{template "wish-item" (.BundleIndex $index $iscreator)}}
         {{end}}
         <input name="wishlist-uuid" value="{{.UUID}}" class="hidden">
-        {{template "plus-button" (newButton "/new" "bg-blue-400" "bg-blue-500" "end")}}
+        {{if .IsCreator}}
+            {{template "plus-button" (newButton "/new" "bg-blue-400" "bg-blue-500" "end")}}
+        {{end}}
     </div>
+    {{if .IsCreator}}
+        <div class="max-w-lg mx-auto bg-white shadow-md rounded-lg p-6 mt-6">
+            <!-- Description -->
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Zum Teilen für Freunde und Familie</h2>
+
+            <!-- URL Card -->
+            <div class="flex items-center space-x-4">
+                <!-- URL Display Field -->
+                <input type="text" id="wishlist-url"
+                       class="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                       readonly />
+
+                <!-- Copy Button -->
+                <button id="copy-button" class="px-4 py-2 bg-blue-400 hover:bg-blue-500 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50">
+                    Kopieren
+                </button>
+            </div>
+        </div>
+    {{end}}
 </div>
+{{if .IsCreator}}
+    <script>
+        // Automatically fill the input field with the current URL
+        document.getElementById("wishlist-url").value = window.location.href + {{.UUID}};
+
+        // Add event listener to copy the URL to the clipboard
+        document.getElementById("copy-button").addEventListener("click", function() {
+            // Select the URL field
+            var urlField = document.getElementById("wishlist-url");
+            urlField.select();
+            urlField.setSelectionRange(0, 99999); // For mobile devices
+
+            // Copy the text inside the input field
+            document.execCommand("copy");
+        });
+    </script>
 {{end}}
+{{end}}
+http://127.0.0.1:8080/B7BF5E9FB91354F66756B90E4D871246
