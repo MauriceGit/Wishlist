@@ -2,14 +2,20 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
+	_ "embed"
 	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
+	"wishlist/sqlc"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // ======================== Used to communicate with html/template
@@ -61,6 +67,9 @@ type shortcut struct {
 	user          string
 	wishlistIndex int
 }
+
+//go:embed schema.sql
+var ddl string
 
 var (
 	defaultImage = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images"
@@ -632,6 +641,25 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
+	ctx := context.Background()
+
+	db, err := sql.Open("sqlite3", "wishlist.sqlite3")
+	if err != nil {
+		fmt.Printf("Error opening the sqlite database: %v\n", err)
+		return
+	}
+
+	// create tables
+	if _, err := db.ExecContext(ctx, ddl); err != nil {
+		fmt.Printf("Error creating the tables: %v\n", err)
+		return
+	}
+
+	queries := sqlc.New(db)
+
+	tmpUsers, err := queries.GetUsers(ctx)
+	fmt.Println("All users: ", tmpUsers, err)
 
 	err, mUUID := newUUID()
 	if err != nil {
