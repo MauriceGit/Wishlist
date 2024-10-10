@@ -78,17 +78,25 @@ VALUES (
 
 -- name: GetLink :one
 SELECT * FROM links
-WHERE wish_id = ? AND link_index = ? LIMIT 1;
+WHERE wish_id = (
+    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
+) AND link_index = ? LIMIT 1;
 
 -- name: GetLinks :many
 SELECT * FROM links
-WHERE wish_id = ?;
+WHERE wish_id = (
+    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
+);
 
 -- name: UpdateLink :exec
 UPDATE links
 SET url = ?
-WHERE wish_id = ? AND link_index = ?;
+WHERE wish_id = (
+    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
+) AND link_index = ?;
 
 -- name: DeleteLink :exec
 DELETE FROM links
-WHERE wish_id = ? AND link_index = ?;
+WHERE wish_id = (
+    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
+) AND link_index = ?;
