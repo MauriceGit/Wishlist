@@ -299,7 +299,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-
+	var err error
 	if r.Method == http.MethodPost {
 		mu.Lock()
 		defer mu.Unlock()
@@ -316,14 +316,23 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		password := r.FormValue("password")
 		pHash := hashPassword(user, password)
 
+		// First check, if the user is already loaded from db
 		userData, ok := users[user]
 		if !ok {
-			fmt.Printf("User '%v' does not exist.\n", user)
-			w.WriteHeader(http.StatusOK)
-			if err := tmplOther.ExecuteTemplate(w, "login-error", nil); err != nil {
+
+			userData, err = loadUserDataFromDB(user)
+			if err != nil {
 				fmt.Println(err)
+				w.WriteHeader(http.StatusOK)
+				if err := tmplOther.ExecuteTemplate(w, "login-error", nil); err != nil {
+					fmt.Println(err)
+				}
+				return
 			}
-			return
+			users[user] = userData
+			for wlIndex, wl := range users[user].Wishlists {
+				shortcuts[wl.UUID] = shortcut{user, wlIndex}
+			}
 		}
 
 		if !bytes.Equal(pHash, userData.passwordHash) {
@@ -770,13 +779,21 @@ func populateDatabase() {
 	}
 }
 
-func loadUserFromDB(username string, passwordHash []byte) userdata {
+func loadUserDataFromDB(username string) (userdata, error) {
+
 	var newUser userdata
-	newUser.passwordHash = passwordHash
+	dbUser, err := dbQueries.GetUser(ctx, username)
+	if err != nil {
+		fmt.Println(err)
+		return newUser, err
+	}
+
+	newUser.passwordHash = dbUser.Passwordhash
 
 	dbWishlists, err := dbQueries.GetWishlists(ctx, username)
 	if err != nil {
 		fmt.Println(err)
+		return newUser, err
 	}
 
 	for _, wl := range dbWishlists {
@@ -787,6 +804,7 @@ func loadUserFromDB(username string, passwordHash []byte) userdata {
 		dbWishes, err := dbQueries.GetWishes(ctx, wl.Uuid)
 		if err != nil {
 			fmt.Println(err)
+			return newUser, err
 		}
 
 		for wIndex, w := range dbWishes {
@@ -799,6 +817,7 @@ func loadUserFromDB(username string, passwordHash []byte) userdata {
 			dbLinks, err := dbQueries.GetLinks(ctx, sqlc.GetLinksParams{wl.Uuid, int64(wIndex)})
 			if err != nil {
 				fmt.Println(err)
+				return newUser, err
 			}
 
 			for _, l := range dbLinks {
@@ -811,7 +830,7 @@ func loadUserFromDB(username string, passwordHash []byte) userdata {
 		newUser.Wishlists = append(newUser.Wishlists, wishlist)
 	}
 
-	return newUser
+	return newUser, nil
 }
 
 func populateDataStructures() {
@@ -821,9 +840,11 @@ func populateDataStructures() {
 		fmt.Println(err)
 	}
 	for _, user := range dbUsers {
-		users[user.Name] = loadUserFromDB(user.Name, user.Passwordhash)
-		for wlIndex, wl := range users[user.Name].Wishlists {
-			shortcuts[wl.UUID] = shortcut{user.Name, wlIndex}
+		if newUser, err := loadUserDataFromDB(user.Name); err == nil {
+			users[user.Name] = newUser
+			for wlIndex, wl := range users[user.Name].Wishlists {
+				shortcuts[wl.UUID] = shortcut{user.Name, wlIndex}
+			}
 		}
 	}
 }
@@ -833,7 +854,7 @@ func main() {
 	initDatabase()
 
 	//populateDatabase()
-	populateDataStructures()
+	//populateDataStructures()
 
 	// Shows /overview when logged in or /landingpage otherwise
 	http.HandleFunc("/", allHandler)
