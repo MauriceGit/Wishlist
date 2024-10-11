@@ -68,9 +68,6 @@ type shortcut struct {
 	wishlistIndex int
 }
 
-//go:embed schema.sql
-var ddl string
-
 var (
 	defaultImage = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images"
 
@@ -92,6 +89,12 @@ var (
 	tmplOther = template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
 		"templates/other.html",
 	))
+
+	//go:embed schema.sql
+	ddl       string
+	ctx       = context.Background()
+	db        *sql.DB
+	dbQueries *sqlc.Queries
 )
 
 func (s *session) isExpired() bool {
@@ -640,26 +643,30 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func main() {
+func initDatabase() {
 
-	ctx := context.Background()
-
-	db, err := sql.Open("sqlite3", "wishlist.sqlite3")
+	var err error
+	db, err = sql.Open("sqlite3", "wishlist.sqlite3")
 	if err != nil {
 		fmt.Printf("Error opening the sqlite database: %v\n", err)
 		return
 	}
 
-	// create tables
-	if _, err := db.ExecContext(ctx, ddl); err != nil {
+	// create tables if they don't exist yet
+	if _, err = db.ExecContext(ctx, ddl); err != nil {
 		fmt.Printf("Error creating the tables: %v\n", err)
 		return
 	}
 
-	queries := sqlc.New(db)
+	dbQueries = sqlc.New(db)
+}
 
-	tmpUsers, err := queries.GetUsers(ctx)
-	fmt.Println("All users: ", tmpUsers, err)
+func populateDatabase() {
+
+	dbQueries.DeleteAllUsers(ctx)
+	dbQueries.DeleteAllWishlists(ctx)
+	dbQueries.DeleteAllWishes(ctx)
+	dbQueries.DeleteAllLinks(ctx)
 
 	err, mUUID := newUUID()
 	if err != nil {
@@ -715,6 +722,118 @@ func main() {
 	shortcuts[mUUID] = shortcut{"Maurice", 0}
 	shortcuts[mUUID2] = shortcut{"Maurice", 1}
 	shortcuts[nUUID] = shortcut{"Nadine", 0}
+
+	for username, data := range users {
+		// Add user if it doesn't exist
+		if _, err := dbQueries.GetUser(ctx, username); err != nil {
+			if err := dbQueries.CreateUser(ctx, sqlc.CreateUserParams{username, data.passwordHash}); err != nil {
+				fmt.Println(err)
+			}
+		}
+
+		for _, wl := range data.Wishlists {
+			// Add wishlist if it doesn't exist!
+			if _, err := dbQueries.GetWishlist(ctx, wl.UUID); err != nil {
+				if err := dbQueries.CreateWishlist(ctx, sqlc.CreateWishlistParams{wl.UUID, username, wl.Title}); err != nil {
+					fmt.Println(err)
+				}
+			}
+
+			for wIndex, w := range wl.Wishes {
+				reserved := int64(0)
+				if w.Reserved {
+					reserved = 1
+				}
+				// Add wish if it doesn't exist
+				if _, err := dbQueries.GetWish(ctx, sqlc.GetWishParams{wl.UUID, int64(wIndex)}); err != nil {
+					if err := dbQueries.CreateWish(ctx, sqlc.CreateWishParams{
+						WishlistUuid: wl.UUID,
+						WishIndex:    int64(wIndex),
+						Name:         w.Name,
+						Description:  w.Description,
+						ImageUrl:     w.ImageUrl,
+						Reserved:     reserved,
+					}); err != nil {
+						fmt.Println(err)
+					}
+				}
+
+				for lIndex, link := range w.Links {
+					if _, err := dbQueries.GetLink(ctx, sqlc.GetLinkParams{wl.UUID, int64(wIndex), int64(lIndex)}); err != nil {
+						if err := dbQueries.CreateLink(ctx, sqlc.CreateLinkParams{wl.UUID, int64(wIndex), int64(lIndex), link}); err != nil {
+							fmt.Println(err)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func loadUserFromDB(username string, passwordHash []byte) userdata {
+	var newUser userdata
+	newUser.passwordHash = passwordHash
+
+	dbWishlists, err := dbQueries.GetWishlists(ctx, username)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	for _, wl := range dbWishlists {
+		var wishlist Wishlist
+		wishlist.Title = wl.Title
+		wishlist.UUID = wl.Uuid
+
+		dbWishes, err := dbQueries.GetWishes(ctx, wl.Uuid)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		for wIndex, w := range dbWishes {
+			var wish Wish
+			wish.Description = w.Description
+			wish.ImageUrl = w.ImageUrl
+			wish.Name = w.Name
+			wish.Reserved = w.Reserved != 0
+
+			dbLinks, err := dbQueries.GetLinks(ctx, sqlc.GetLinksParams{wl.Uuid, int64(wIndex)})
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			for _, l := range dbLinks {
+				wish.Links = append(wish.Links, l.Url)
+			}
+
+			wishlist.Wishes = append(wishlist.Wishes, wish)
+		}
+
+		newUser.Wishlists = append(newUser.Wishlists, wishlist)
+	}
+
+	return newUser
+}
+
+func populateDataStructures() {
+
+	dbUsers, err := dbQueries.GetUsers(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	for _, user := range dbUsers {
+		users[user.Name] = loadUserFromDB(user.Name, user.Passwordhash)
+		for wlIndex, wl := range users[user.Name].Wishlists {
+			shortcuts[wl.UUID] = shortcut{user.Name, wlIndex}
+		}
+	}
+}
+
+func main() {
+
+	initDatabase()
+
+	//populateDatabase()
+	populateDataStructures()
 
 	// Shows /overview when logged in or /landingpage otherwise
 	http.HandleFunc("/", allHandler)

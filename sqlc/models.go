@@ -4,15 +4,11 @@
 
 package sqlc
 
-import (
-	"database/sql"
-)
-
 type Link struct {
 	ID        int64
-	WishID    sql.NullInt64
+	WishID    int64
 	LinkIndex int64
-	Url       sql.NullString
+	Url       string
 }
 
 type User struct {
@@ -22,16 +18,16 @@ type User struct {
 
 type Wish struct {
 	ID           int64
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
-	Name         sql.NullString
-	Description  sql.NullString
-	ImageUrl     sql.NullString
-	Reserved     sql.NullInt64
+	Name         string
+	Description  string
+	ImageUrl     string
+	Reserved     int64
 }
 
 type Wishlist struct {
 	Uuid     string
 	UserName string
-	Title    sql.NullString
+	Title    string
 }

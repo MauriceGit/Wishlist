@@ -7,7 +7,6 @@ package sqlc
 
 import (
 	"context"
-	"database/sql"
 )
 
 const createLink = `-- name: CreateLink :exec
@@ -23,10 +22,10 @@ VALUES (
 `
 
 type CreateLinkParams struct {
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
 	LinkIndex    int64
-	Url          sql.NullString
+	Url          string
 }
 
 func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) error {
@@ -66,12 +65,12 @@ INSERT INTO wishes(
 `
 
 type CreateWishParams struct {
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
-	Name         sql.NullString
-	Description  sql.NullString
-	ImageUrl     sql.NullString
-	Reserved     sql.NullInt64
+	Name         string
+	Description  string
+	ImageUrl     string
+	Reserved     int64
 }
 
 func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) error {
@@ -97,11 +96,47 @@ INSERT INTO wishlists (
 type CreateWishlistParams struct {
 	Uuid     string
 	UserName string
-	Title    sql.NullString
+	Title    string
 }
 
 func (q *Queries) CreateWishlist(ctx context.Context, arg CreateWishlistParams) error {
 	_, err := q.db.ExecContext(ctx, createWishlist, arg.Uuid, arg.UserName, arg.Title)
+	return err
+}
+
+const deleteAllLinks = `-- name: DeleteAllLinks :exec
+DELETE FROM links
+`
+
+func (q *Queries) DeleteAllLinks(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllLinks)
+	return err
+}
+
+const deleteAllUsers = `-- name: DeleteAllUsers :exec
+DELETE FROM users
+`
+
+func (q *Queries) DeleteAllUsers(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllUsers)
+	return err
+}
+
+const deleteAllWishes = `-- name: DeleteAllWishes :exec
+DELETE FROM wishes
+`
+
+func (q *Queries) DeleteAllWishes(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllWishes)
+	return err
+}
+
+const deleteAllWishlists = `-- name: DeleteAllWishlists :exec
+DELETE FROM wishlists
+`
+
+func (q *Queries) DeleteAllWishlists(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteAllWishlists)
 	return err
 }
 
@@ -113,7 +148,7 @@ WHERE wish_id = (
 `
 
 type DeleteLinkParams struct {
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
 	LinkIndex    int64
 }
@@ -123,13 +158,23 @@ func (q *Queries) DeleteLink(ctx context.Context, arg DeleteLinkParams) error {
 	return err
 }
 
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users
+WHERE name = ?
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, name string) error {
+	_, err := q.db.ExecContext(ctx, deleteUser, name)
+	return err
+}
+
 const deleteWish = `-- name: DeleteWish :exec
 DELETE FROM wishes
 WHERE wishlist_uuid = ? AND wish_index = ?
 `
 
 type DeleteWishParams struct {
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
 }
 
@@ -146,7 +191,7 @@ WHERE wish_id = (
 `
 
 type GetLinkParams struct {
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
 	LinkIndex    int64
 }
@@ -168,10 +213,11 @@ SELECT id, wish_id, link_index, url FROM links
 WHERE wish_id = (
     SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
 )
+ORDER BY link_index
 `
 
 type GetLinksParams struct {
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
 }
 
@@ -248,7 +294,7 @@ WHERE wishlist_uuid = ? AND wish_index = ? LIMIT 1
 `
 
 type GetWishParams struct {
-	WishlistUuid sql.NullInt64
+	WishlistUuid string
 	WishIndex    int64
 }
 
@@ -270,9 +316,10 @@ func (q *Queries) GetWish(ctx context.Context, arg GetWishParams) (Wish, error) 
 const getWishes = `-- name: GetWishes :many
 SELECT id, wishlist_uuid, wish_index, name, description, image_url, reserved FROM wishes
 WHERE wishlist_uuid = ?
+ORDER BY wish_index
 `
 
-func (q *Queries) GetWishes(ctx context.Context, wishlistUuid sql.NullInt64) ([]Wish, error) {
+func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, error) {
 	rows, err := q.db.QueryContext(ctx, getWishes, wishlistUuid)
 	if err != nil {
 		return nil, err
@@ -350,8 +397,8 @@ WHERE wishlist_uuid = ? AND wish_index = ?
 `
 
 type SetWishReserveParams struct {
-	Reserved     sql.NullInt64
-	WishlistUuid sql.NullInt64
+	Reserved     int64
+	WishlistUuid string
 	WishIndex    int64
 }
 
@@ -369,8 +416,8 @@ WHERE wish_id = (
 `
 
 type UpdateLinkParams struct {
-	Url          sql.NullString
-	WishlistUuid sql.NullInt64
+	Url          string
+	WishlistUuid string
 	WishIndex    int64
 	LinkIndex    int64
 }
@@ -395,11 +442,11 @@ WHERE wishlist_uuid = ? AND wish_index = ?
 `
 
 type UpdateWishParams struct {
-	Name         sql.NullString
-	Description  sql.NullString
-	ImageUrl     sql.NullString
-	Reserved     sql.NullInt64
-	WishlistUuid sql.NullInt64
+	Name         string
+	Description  string
+	ImageUrl     string
+	Reserved     int64
+	WishlistUuid string
 	WishIndex    int64
 }
 
@@ -422,7 +469,7 @@ WHERE uuid = ?
 `
 
 type UpdateWishlistParams struct {
-	Title sql.NullString
+	Title string
 	Uuid  string
 }
 
