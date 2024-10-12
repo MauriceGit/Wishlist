@@ -249,6 +249,48 @@ func (q *Queries) GetLinks(ctx context.Context, arg GetLinksParams) ([]Link, err
 	return items, nil
 }
 
+const getUnusedLinks = `-- name: GetUnusedLinks :many
+SELECT id, wish_id, link_index, url FROM links
+WHERE wish_id = (
+    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
+) AND link_index >= ?
+ORDER BY link_index
+`
+
+type GetUnusedLinksParams struct {
+	WishlistUuid string
+	WishIndex    int64
+	LinkIndex    int64
+}
+
+func (q *Queries) GetUnusedLinks(ctx context.Context, arg GetUnusedLinksParams) ([]Link, error) {
+	rows, err := q.db.QueryContext(ctx, getUnusedLinks, arg.WishlistUuid, arg.WishIndex, arg.LinkIndex)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Link
+	for rows.Next() {
+		var i Link
+		if err := rows.Scan(
+			&i.ID,
+			&i.WishID,
+			&i.LinkIndex,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUser = `-- name: GetUser :one
 SELECT name, passwordhash FROM users
 WHERE name = ? LIMIT 1

@@ -12,6 +12,10 @@
                 <p class="text-gray-700">{{len .Wishes}} Wünsche</p>
             </a>
         {{end}}
+
+    </div>
+    <div class="mx-auto py-4">
+        {{template "plus-button" (newButton "/newwishlist" "bg-blue-400" "bg-blue-500" "end")}}
     </div>
     </div>
 </div>

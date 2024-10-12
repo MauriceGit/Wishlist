@@ -103,6 +103,13 @@ WHERE wish_id = (
 )
 ORDER BY link_index;
 
+-- name: GetUnusedLinks :many
+SELECT * FROM links
+WHERE wish_id = (
+    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
+) AND link_index >= ?
+ORDER BY link_index;
+
 -- name: UpdateLink :exec
 UPDATE links
 SET url = ?
