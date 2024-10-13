@@ -40,6 +40,10 @@ UPDATE wishlists
 SET title = ?
 WHERE uuid = ?;
 
+-- name: DeleteWishlist :exec
+DELETE FROM wishlists
+WHERE uuid = ?;
+
 -- name: DeleteAllWishlists :exec
 DELETE FROM wishlists;
 

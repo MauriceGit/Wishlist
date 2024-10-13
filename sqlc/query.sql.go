@@ -183,6 +183,16 @@ func (q *Queries) DeleteWish(ctx context.Context, arg DeleteWishParams) error {
 	return err
 }
 
+const deleteWishlist = `-- name: DeleteWishlist :exec
+DELETE FROM wishlists
+WHERE uuid = ?
+`
+
+func (q *Queries) DeleteWishlist(ctx context.Context, uuid string) error {
+	_, err := q.db.ExecContext(ctx, deleteWishlist, uuid)
+	return err
+}
+
 const getLink = `-- name: GetLink :one
 SELECT id, wish_id, link_index, url FROM links
 WHERE wish_id = (

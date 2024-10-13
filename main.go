@@ -431,6 +431,42 @@ func editwishlistDoneHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getWishlistIndex(wishlists []Wishlist, uuid string) int {
+	for i, wl := range wishlists {
+		if wl.UUID == uuid {
+			return i
+		}
+	}
+	fmt.Printf("Error: No wishlist found with uuid == '%v'\n", uuid)
+	return -1
+}
+
+func deletewishlistHandler(w http.ResponseWriter, r *http.Request) {
+
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPut {
+		uuid := r.PathValue("uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+
+		sc := shortcuts[uuid]
+		tmpUserdata := users[sc.user]
+		i := getWishlistIndex(tmpUserdata.Wishlists, uuid)
+		if i >= 0 {
+			tmpUserdata.Wishlists = append(tmpUserdata.Wishlists[:i], tmpUserdata.Wishlists[i+1:]...)
+		}
+		users[sc.user] = tmpUserdata
+
+		if err := dbQueries.DeleteWishlist(ctx, uuid); err != nil {
+			fmt.Printf("Deleting Wishlist in db with uuid: '%v' failed: %v\n", uuid, err)
+		}
+
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if r.Method == http.MethodPost {
@@ -1084,6 +1120,8 @@ func main() {
 	http.HandleFunc("/wishlisttitle/{uuid}", wishlisttitleHandler)
 	// Transfer all changes to the wishlist to the data structure and db
 	http.HandleFunc("/editwishlist/{uuid}/done", editwishlistDoneHandler)
+	// Delete a wishlist
+	http.HandleFunc("/deletewishlist/{uuid}", deletewishlistHandler)
 
 	// Reserves a wish given the wishlist uuid and wish index
 	http.HandleFunc("/reserve/{idx}", reserveWishHandler)
