@@ -432,10 +432,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			Name:     "session_token",
 			Value:    sessionToken,
 			Expires:  sessionExpire,
-			Path:     "/",                   // Ensures the cookie is available throughout the site
-			SameSite: http.SameSiteNoneMode, // Use Lax, or change to Strict or None as per your needs
-			Secure:   false,                 // Must be true if SameSite=None (requires HTTPS)
-			HttpOnly: true,                  // Prevents JavaScript from accessing the cookie
+			Path:     "/",                  // Ensures the cookie is available throughout the site
+			SameSite: http.SameSiteLaxMode, // Use Lax, or change to Strict or None as per your needs
+			Secure:   false,                // Must be true if SameSite=None (requires HTTPS)
+			HttpOnly: true,                 // Prevents JavaScript from accessing the cookie
 		})
 
 		// User authenticated and everything is OK
@@ -467,10 +467,10 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 			Name:     "session_token",
 			Value:    "",
 			Expires:  time.Now(),
-			Path:     "/",                   // Ensures the cookie is available throughout the site
-			SameSite: http.SameSiteNoneMode, // Use Lax, or change to Strict or None as per your needs
-			Secure:   false,                 // Must be true if SameSite=None (requires HTTPS)
-			HttpOnly: true,                  // Prevents JavaScript from accessing the cookie
+			Path:     "/",                  // Ensures the cookie is available throughout the site
+			SameSite: http.SameSiteLaxMode, // Use Lax, or change to Strict or None as per your needs
+			Secure:   false,                // Must be true if SameSite=None (requires HTTPS)
+			HttpOnly: true,                 // Prevents JavaScript from accessing the cookie
 		})
 
 		w.Header().Set("HX-Redirect", "/")
