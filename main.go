@@ -341,26 +341,93 @@ func newwishlistHandler(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusOK)
+	}
+}
 
-		/*
-			data := struct {
-				Title     string
-				UUID      string
-				Wishes    []Wish
-				IsCreator bool
-				Creator   string
-			}{
-				Title:     wishlist.Title,
-				UUID:      wishlist.UUID,
-				Wishes:    wishlist.Wishes,
-				IsCreator: user == sc.user,
-				Creator:   sc.user,
-			}
+func editwishlistHandler(w http.ResponseWriter, r *http.Request) {
 
-			if err := tmplFullWishlist.ExecuteTemplate(w, "content", data); err != nil {
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+		uuid := r.PathValue("uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+
+		if r.Header.Get("HX-Request") == "true" {
+			sc := shortcuts[uuid]
+			wishlist := users[sc.user].Wishlists[sc.wishlistIndex]
+			if err := tmplFullWishlist.ExecuteTemplate(w, "wishlist-edit", wishlist); err != nil {
 				fmt.Println(err)
 			}
-		*/
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
+}
+
+func renderWishlistTitle(w http.ResponseWriter, wishlist Wishlist, isCreator bool) {
+	if err := tmplFullWishlist.ExecuteTemplate(w, "wishlist-title", struct {
+		Title     string
+		UUID      string
+		IsCreator bool
+	}{
+		Title:     wishlist.Title,
+		UUID:      wishlist.UUID,
+		IsCreator: isCreator,
+	}); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func wishlisttitleHandler(w http.ResponseWriter, r *http.Request) {
+
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+		uuid := r.PathValue("uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+
+		if r.Header.Get("HX-Request") == "true" {
+			sc := shortcuts[uuid]
+			wishlist := users[sc.user].Wishlists[sc.wishlistIndex]
+
+			renderWishlistTitle(w, wishlist, user == sc.user)
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
+}
+
+func editwishlistDoneHandler(w http.ResponseWriter, r *http.Request) {
+
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPost {
+		uuid := r.PathValue("uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Unable to parse form", http.StatusBadRequest)
+			return
+		}
+
+		if r.Header.Get("HX-Request") == "true" {
+			sc := shortcuts[uuid]
+
+			tmpUserdata := users[sc.user]
+			tmpUserdata.Wishlists[sc.wishlistIndex].Title = r.FormValue("name")
+			users[sc.user] = tmpUserdata
+
+			if err := dbQueries.UpdateWishlist(ctx, sqlc.UpdateWishlistParams{r.FormValue("name"), uuid}); err != nil {
+				fmt.Printf("Wishlist title update for db failed: %v\n", err)
+			}
+
+			renderWishlistTitle(w, users[sc.user].Wishlists[sc.wishlistIndex], user == sc.user)
+			return
+		}
+		http.Redirect(w, r, "/wishlisttitle/"+uuid, http.StatusOK)
 	}
 }
 
@@ -1011,6 +1078,12 @@ func main() {
 	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
 	// Create new wishlist for user
 	http.HandleFunc("/newwishlist", newwishlistHandler)
+	// Show the edit view of a wishlist
+	http.HandleFunc("/editwishlist/{uuid}", editwishlistHandler)
+	// Shows the title of the wishlist instead of the edit version
+	http.HandleFunc("/wishlisttitle/{uuid}", wishlisttitleHandler)
+	// Transfer all changes to the wishlist to the data structure and db
+	http.HandleFunc("/editwishlist/{uuid}/done", editwishlistDoneHandler)
 
 	// Reserves a wish given the wishlist uuid and wish index
 	http.HandleFunc("/reserve/{idx}", reserveWishHandler)

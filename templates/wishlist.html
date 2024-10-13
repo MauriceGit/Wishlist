@@ -1,9 +1,63 @@
+
+{{define "wishlist-title"}}
+    <div hx-target="this" hx-swap="outerHTML" class="flex items-center px-4 h-20">
+        <div class="flex-1">
+            <h1 class="text-3xl font-bold mb-4 py-6">{{.Title}}</h1>
+        </div>
+
+        {{if .IsCreator}}
+            <button hx-get="/editwishlist/{{.UUID}}" class="flex-none w-12 h-8 px-3 text-white rounded hover:bg-amber-400">
+                <!-- Edit -->
+                <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                  <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m14.304 4.844 2.852 2.852M7 7H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4.5m2.409-9.91a2.017 2.017 0 0 1 0 2.853l-6.844 6.844L8 14l.713-3.565 6.844-6.844a2.015 2.015 0 0 1 2.852 0Z"/>
+                </svg>
+            </button>
+        {{end}}
+    </div>
+{{end}}
+
+{{define "wishlist-edit"}}
+<form hx-post="/editwishlist/{{.UUID}}/done" hx-target="this" hx-swap="outerHTML" class="bg-white p-6 shadow-md rounded-lg">
+    <div class="flex flex-col gap-4">
+
+        <!-- Name Input -->
+        <div class="flex flex-col">
+            <label for="name" class="mb-1 text-lg font-semibold text-gray-700">Name</label>
+            <input type="text" id="name" name="name" value="{{.Title}}"
+                class="p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-500"
+                placeholder="Enter Wishlist Name">
+        </div>
+
+        <div class="flex justify-end gap-3">
+            <!-- OK Button -->
+            <button type="submit" class="px-6 py-2 bg-lime-500 hover:bg-lime-600 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-50 shadow-md">
+                OK
+            </button>
+            <!-- Cancel Button -->
+            <button type="button" hx-get="/wishlisttitle/{{.UUID}}" class="px-6 py-2 bg-gray-400 hover:bg-gray-500 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+                Cancel
+            </button>
+            <!-- Delete Button - I have to use hx-put because hx-delete will not send the wishlist-uuid as a formValue... -->
+            <button type="button" hx-put="/deletewishlist/{{.UUID}}"
+                    hx-confirm="Are you sure you wish to delete the wishlist?"
+                    class="px-6 py-2 bg-red-400 hover:bg-red-500 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50 shadow-md">
+                Delete
+            </button>
+        </div>
+    </div>
+</form>
+{{end}}
+
 {{define "content"}}
 <div class="container mx-auto p-4">
     {{if not .IsCreator}}
         <h2 class="text-xl mb-4 py-2">(Ersteller der Wunschliste: {{.Creator}})</h2>
     {{end}}
-    <h1 class="text-3xl font-bold mb-4 py-6">{{.Title}}</h1>
+
+    <div class="py-4">
+        {{template "wishlist-title" .}}
+    </div>
+
     <div class="grid grid-cols-1 gap-4">
         {{$iscreator := .IsCreator}}
         {{range $index, $wish := .Wishes}}
