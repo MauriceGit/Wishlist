@@ -5,10 +5,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"database/sql"
 	_ "embed"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -16,6 +18,7 @@ import (
 	"wishlist/sqlc"
 
 	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 // ======================== Used to communicate with html/template
@@ -1098,10 +1101,20 @@ func populateDataStructures() {
 
 func main() {
 
-	initDatabase()
+	certManager := autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
+		Cache:      autocert.DirCache("certs"),
+	}
 
-	//populateDatabase()
-	//populateDataStructures()
+	server := &http.Server{
+		Addr: ":https",
+		TLSConfig: &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+		},
+	}
+
+	initDatabase()
 
 	// Shows /overview when logged in or /landingpage otherwise
 	http.HandleFunc("/", allHandler)
@@ -1148,5 +1161,9 @@ func main() {
 	http.HandleFunc("/logout", logoutHandler)
 
 	//http.HandleFunc("readwishlist/{id}", readonlyWishlistHandler)
-	http.ListenAndServe(":8080", nil)
+	//http.ListenAndServe(":8080", nil)
+
+	go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
+
+	log.Fatal(server.ListenAndServeTLS("", ""))
 }
