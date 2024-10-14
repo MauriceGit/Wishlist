@@ -525,7 +525,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		sessionExpire := time.Now().Add(10 * time.Minute)
+		// Expires after 30 days
+		sessionExpire := time.Now().Add(24 * time.Hour * 30)
 
 		sessions[sessionToken] = session{
 			username: user,
