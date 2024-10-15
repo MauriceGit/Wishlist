@@ -50,9 +50,10 @@ type session struct {
 type Wish struct {
 	Name        string
 	Description string
-	Links       []string
-	ImageUrl    string
-	Reserved    bool
+	//Links       []string
+	Links    map[int64]string
+	ImageUrl string
+	Reserved bool
 }
 
 type Wishlist struct {
