@@ -48,7 +48,7 @@ WHERE uuid = ?;
 DELETE FROM wishlists
 WHERE user_name = ?;
 
--- name: CreateWish :exec
+-- name: CreateWish :one
 INSERT INTO wishes(
     wishlist_uuid, name, description, image_url, reserved
 ) VALUES (
@@ -86,7 +86,7 @@ WHERE id = ?;
 DELETE FROM wishes
 WHERE wishlist_uuid = ?;
 
--- name: CreateLink :exec
+-- name: CreateLink :one
 INSERT INTO links (
     wish_id, url
 )

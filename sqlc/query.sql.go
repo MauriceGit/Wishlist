@@ -9,7 +9,7 @@ import (
 	"context"
 )
 
-const createLink = `-- name: CreateLink :exec
+const createLink = `-- name: CreateLink :one
 INSERT INTO links (
     wish_id, url
 )
@@ -24,9 +24,11 @@ type CreateLinkParams struct {
 	Url    string
 }
 
-func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) error {
-	_, err := q.db.ExecContext(ctx, createLink, arg.WishID, arg.Url)
-	return err
+func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) (Link, error) {
+	row := q.db.QueryRowContext(ctx, createLink, arg.WishID, arg.Url)
+	var i Link
+	err := row.Scan(&i.ID, &i.WishID, &i.Url)
+	return i, err
 }
 
 const createUser = `-- name: CreateUser :exec
@@ -47,7 +49,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
-const createWish = `-- name: CreateWish :exec
+const createWish = `-- name: CreateWish :one
 INSERT INTO wishes(
     wishlist_uuid, name, description, image_url, reserved
 ) VALUES (
@@ -64,15 +66,24 @@ type CreateWishParams struct {
 	Reserved     int64
 }
 
-func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) error {
-	_, err := q.db.ExecContext(ctx, createWish,
+func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, error) {
+	row := q.db.QueryRowContext(ctx, createWish,
 		arg.WishlistUuid,
 		arg.Name,
 		arg.Description,
 		arg.ImageUrl,
 		arg.Reserved,
 	)
-	return err
+	var i Wish
+	err := row.Scan(
+		&i.ID,
+		&i.WishlistUuid,
+		&i.Name,
+		&i.Description,
+		&i.ImageUrl,
+		&i.Reserved,
+	)
+	return i, err
 }
 
 const createWishlist = `-- name: CreateWishlist :exec
