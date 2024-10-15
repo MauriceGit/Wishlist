@@ -11,30 +11,21 @@ import (
 
 const createLink = `-- name: CreateLink :exec
 INSERT INTO links (
-    wish_id, link_index, url
+    wish_id, url
 )
 VALUES (
-    (SELECT id FROM wishes
-     WHERE wishlist_uuid = ? AND wish_index = ?),
-    ?,
-    ?
+    ?, ?
 )
+RETURNING id, wish_id, url
 `
 
 type CreateLinkParams struct {
-	WishlistUuid string
-	WishIndex    int64
-	LinkIndex    int64
-	Url          string
+	WishID int64
+	Url    string
 }
 
 func (q *Queries) CreateLink(ctx context.Context, arg CreateLinkParams) error {
-	_, err := q.db.ExecContext(ctx, createLink,
-		arg.WishlistUuid,
-		arg.WishIndex,
-		arg.LinkIndex,
-		arg.Url,
-	)
+	_, err := q.db.ExecContext(ctx, createLink, arg.WishID, arg.Url)
 	return err
 }
 
@@ -58,15 +49,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 
 const createWish = `-- name: CreateWish :exec
 INSERT INTO wishes(
-    wishlist_uuid, wish_index, name, description, image_url, reserved
+    wishlist_uuid, name, description, image_url, reserved
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?
 )
+RETURNING id, wishlist_uuid, name, description, image_url, reserved
 `
 
 type CreateWishParams struct {
 	WishlistUuid string
-	WishIndex    int64
 	Name         string
 	Description  string
 	ImageUrl     string
@@ -76,7 +67,6 @@ type CreateWishParams struct {
 func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) error {
 	_, err := q.db.ExecContext(ctx, createWish,
 		arg.WishlistUuid,
-		arg.WishIndex,
 		arg.Name,
 		arg.Description,
 		arg.ImageUrl,
@@ -124,37 +114,36 @@ func (q *Queries) DeleteAllUsers(ctx context.Context) error {
 
 const deleteAllWishes = `-- name: DeleteAllWishes :exec
 DELETE FROM wishes
+WHERE wishlist_uuid = ?
 `
 
-func (q *Queries) DeleteAllWishes(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, deleteAllWishes)
+func (q *Queries) DeleteAllWishes(ctx context.Context, wishlistUuid string) error {
+	_, err := q.db.ExecContext(ctx, deleteAllWishes, wishlistUuid)
 	return err
 }
 
 const deleteAllWishlists = `-- name: DeleteAllWishlists :exec
 DELETE FROM wishlists
+WHERE user_name = ?
 `
 
-func (q *Queries) DeleteAllWishlists(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, deleteAllWishlists)
+func (q *Queries) DeleteAllWishlists(ctx context.Context, userName string) error {
+	_, err := q.db.ExecContext(ctx, deleteAllWishlists, userName)
 	return err
 }
 
 const deleteLink = `-- name: DeleteLink :exec
 DELETE FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index = ?
+WHERE wish_id = ? AND id = ?
 `
 
 type DeleteLinkParams struct {
-	WishlistUuid string
-	WishIndex    int64
-	LinkIndex    int64
+	WishID int64
+	ID     int64
 }
 
 func (q *Queries) DeleteLink(ctx context.Context, arg DeleteLinkParams) error {
-	_, err := q.db.ExecContext(ctx, deleteLink, arg.WishlistUuid, arg.WishIndex, arg.LinkIndex)
+	_, err := q.db.ExecContext(ctx, deleteLink, arg.WishID, arg.ID)
 	return err
 }
 
@@ -170,16 +159,21 @@ func (q *Queries) DeleteUser(ctx context.Context, name string) error {
 
 const deleteWish = `-- name: DeleteWish :exec
 DELETE FROM wishes
-WHERE wishlist_uuid = ? AND wish_index = ?
+WHERE id = ?
 `
 
-type DeleteWishParams struct {
-	WishlistUuid string
-	WishIndex    int64
+func (q *Queries) DeleteWish(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteWish, id)
+	return err
 }
 
-func (q *Queries) DeleteWish(ctx context.Context, arg DeleteWishParams) error {
-	_, err := q.db.ExecContext(ctx, deleteWish, arg.WishlistUuid, arg.WishIndex)
+const deleteWishLinks = `-- name: DeleteWishLinks :exec
+DELETE FROM links
+WHERE wish_id = ?
+`
+
+func (q *Queries) DeleteWishLinks(ctx context.Context, wishID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteWishLinks, wishID)
 	return err
 }
 
@@ -194,45 +188,30 @@ func (q *Queries) DeleteWishlist(ctx context.Context, uuid string) error {
 }
 
 const getLink = `-- name: GetLink :one
-SELECT id, wish_id, link_index, url FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index = ? LIMIT 1
+SELECT id, wish_id, url FROM links
+WHERE wish_id = ? AND id = ? LIMIT 1
 `
 
 type GetLinkParams struct {
-	WishlistUuid string
-	WishIndex    int64
-	LinkIndex    int64
+	WishID int64
+	ID     int64
 }
 
 func (q *Queries) GetLink(ctx context.Context, arg GetLinkParams) (Link, error) {
-	row := q.db.QueryRowContext(ctx, getLink, arg.WishlistUuid, arg.WishIndex, arg.LinkIndex)
+	row := q.db.QueryRowContext(ctx, getLink, arg.WishID, arg.ID)
 	var i Link
-	err := row.Scan(
-		&i.ID,
-		&i.WishID,
-		&i.LinkIndex,
-		&i.Url,
-	)
+	err := row.Scan(&i.ID, &i.WishID, &i.Url)
 	return i, err
 }
 
 const getLinks = `-- name: GetLinks :many
-SELECT id, wish_id, link_index, url FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-)
-ORDER BY link_index
+SELECT id, wish_id, url FROM links
+WHERE wish_id = ?
+ORDER BY id
 `
 
-type GetLinksParams struct {
-	WishlistUuid string
-	WishIndex    int64
-}
-
-func (q *Queries) GetLinks(ctx context.Context, arg GetLinksParams) ([]Link, error) {
-	rows, err := q.db.QueryContext(ctx, getLinks, arg.WishlistUuid, arg.WishIndex)
+func (q *Queries) GetLinks(ctx context.Context, wishID int64) ([]Link, error) {
+	rows, err := q.db.QueryContext(ctx, getLinks, wishID)
 	if err != nil {
 		return nil, err
 	}
@@ -240,54 +219,7 @@ func (q *Queries) GetLinks(ctx context.Context, arg GetLinksParams) ([]Link, err
 	var items []Link
 	for rows.Next() {
 		var i Link
-		if err := rows.Scan(
-			&i.ID,
-			&i.WishID,
-			&i.LinkIndex,
-			&i.Url,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getUnusedLinks = `-- name: GetUnusedLinks :many
-SELECT id, wish_id, link_index, url FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index >= ?
-ORDER BY link_index
-`
-
-type GetUnusedLinksParams struct {
-	WishlistUuid string
-	WishIndex    int64
-	LinkIndex    int64
-}
-
-func (q *Queries) GetUnusedLinks(ctx context.Context, arg GetUnusedLinksParams) ([]Link, error) {
-	rows, err := q.db.QueryContext(ctx, getUnusedLinks, arg.WishlistUuid, arg.WishIndex, arg.LinkIndex)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Link
-	for rows.Next() {
-		var i Link
-		if err := rows.Scan(
-			&i.ID,
-			&i.WishID,
-			&i.LinkIndex,
-			&i.Url,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.WishID, &i.Url); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -341,22 +273,16 @@ func (q *Queries) GetUsers(ctx context.Context) ([]User, error) {
 }
 
 const getWish = `-- name: GetWish :one
-SELECT id, wishlist_uuid, wish_index, name, description, image_url, reserved FROM wishes
-WHERE wishlist_uuid = ? AND wish_index = ? LIMIT 1
+SELECT id, wishlist_uuid, name, description, image_url, reserved FROM wishes
+WHERE id = ? LIMIT 1
 `
 
-type GetWishParams struct {
-	WishlistUuid string
-	WishIndex    int64
-}
-
-func (q *Queries) GetWish(ctx context.Context, arg GetWishParams) (Wish, error) {
-	row := q.db.QueryRowContext(ctx, getWish, arg.WishlistUuid, arg.WishIndex)
+func (q *Queries) GetWish(ctx context.Context, id int64) (Wish, error) {
+	row := q.db.QueryRowContext(ctx, getWish, id)
 	var i Wish
 	err := row.Scan(
 		&i.ID,
 		&i.WishlistUuid,
-		&i.WishIndex,
 		&i.Name,
 		&i.Description,
 		&i.ImageUrl,
@@ -366,9 +292,9 @@ func (q *Queries) GetWish(ctx context.Context, arg GetWishParams) (Wish, error) 
 }
 
 const getWishes = `-- name: GetWishes :many
-SELECT id, wishlist_uuid, wish_index, name, description, image_url, reserved FROM wishes
+SELECT id, wishlist_uuid, name, description, image_url, reserved FROM wishes
 WHERE wishlist_uuid = ?
-ORDER BY wish_index
+ORDER BY id
 `
 
 func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, error) {
@@ -383,7 +309,6 @@ func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, e
 		if err := rows.Scan(
 			&i.ID,
 			&i.WishlistUuid,
-			&i.WishIndex,
 			&i.Name,
 			&i.Description,
 			&i.ImageUrl,
@@ -445,42 +370,33 @@ func (q *Queries) GetWishlists(ctx context.Context, userName string) ([]Wishlist
 const setWishReserve = `-- name: SetWishReserve :exec
 UPDATE wishes
 SET reserved = ?
-WHERE wishlist_uuid = ? AND wish_index = ?
+WHERE id = ?
 `
 
 type SetWishReserveParams struct {
-	Reserved     int64
-	WishlistUuid string
-	WishIndex    int64
+	Reserved int64
+	ID       int64
 }
 
 func (q *Queries) SetWishReserve(ctx context.Context, arg SetWishReserveParams) error {
-	_, err := q.db.ExecContext(ctx, setWishReserve, arg.Reserved, arg.WishlistUuid, arg.WishIndex)
+	_, err := q.db.ExecContext(ctx, setWishReserve, arg.Reserved, arg.ID)
 	return err
 }
 
 const updateLink = `-- name: UpdateLink :exec
 UPDATE links
 SET url = ?
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index = ?
+WHERE wish_id = ? AND id = ?
 `
 
 type UpdateLinkParams struct {
-	Url          string
-	WishlistUuid string
-	WishIndex    int64
-	LinkIndex    int64
+	Url    string
+	WishID int64
+	ID     int64
 }
 
 func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) error {
-	_, err := q.db.ExecContext(ctx, updateLink,
-		arg.Url,
-		arg.WishlistUuid,
-		arg.WishIndex,
-		arg.LinkIndex,
-	)
+	_, err := q.db.ExecContext(ctx, updateLink, arg.Url, arg.WishID, arg.ID)
 	return err
 }
 
@@ -490,16 +406,15 @@ SET name = ?,
     description = ?,
     image_url = ?,
     reserved = ?
-WHERE wishlist_uuid = ? AND wish_index = ?
+WHERE id = ?
 `
 
 type UpdateWishParams struct {
-	Name         string
-	Description  string
-	ImageUrl     string
-	Reserved     int64
-	WishlistUuid string
-	WishIndex    int64
+	Name        string
+	Description string
+	ImageUrl    string
+	Reserved    int64
+	ID          int64
 }
 
 func (q *Queries) UpdateWish(ctx context.Context, arg UpdateWishParams) error {
@@ -508,8 +423,7 @@ func (q *Queries) UpdateWish(ctx context.Context, arg UpdateWishParams) error {
 		arg.Description,
 		arg.ImageUrl,
 		arg.Reserved,
-		arg.WishlistUuid,
-		arg.WishIndex,
+		arg.ID,
 	)
 	return err
 }

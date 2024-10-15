@@ -45,23 +45,25 @@ DELETE FROM wishlists
 WHERE uuid = ?;
 
 -- name: DeleteAllWishlists :exec
-DELETE FROM wishlists;
+DELETE FROM wishlists
+WHERE user_name = ?;
 
 -- name: CreateWish :exec
 INSERT INTO wishes(
-    wishlist_uuid, wish_index, name, description, image_url, reserved
+    wishlist_uuid, name, description, image_url, reserved
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
-);
+    ?, ?, ?, ?, ?
+)
+RETURNING *;
 
 -- name: GetWish :one
 SELECT * FROM wishes
-WHERE wishlist_uuid = ? AND wish_index = ? LIMIT 1;
+WHERE id = ? LIMIT 1;
 
 -- name: GetWishes :many
 SELECT * FROM wishes
 WHERE wishlist_uuid = ?
-ORDER BY wish_index;
+ORDER BY id;
 
 -- name: UpdateWish :exec
 UPDATE wishes
@@ -69,70 +71,51 @@ SET name = ?,
     description = ?,
     image_url = ?,
     reserved = ?
-WHERE wishlist_uuid = ? AND wish_index = ?;
+WHERE id = ?;
 
 -- name: SetWishReserve :exec
 UPDATE wishes
 SET reserved = ?
-WHERE wishlist_uuid = ? AND wish_index = ?;
+WHERE id = ?;
 
 -- name: DeleteWish :exec
 DELETE FROM wishes
-WHERE wishlist_uuid = ? AND wish_index = ?;
+WHERE id = ?;
 
 -- name: DeleteAllWishes :exec
-DELETE FROM wishes;
+DELETE FROM wishes
+WHERE wishlist_uuid = ?;
 
 -- name: CreateLink :exec
 INSERT INTO links (
-    wish_id, link_index, url
+    wish_id, url
 )
 VALUES (
-    (SELECT id FROM wishes
-     WHERE wishlist_uuid = ? AND wish_index = ?),
-    ?,
-    ?
+    ?, ?
 )
 RETURNING *;
 
 -- name: GetLink :one
 SELECT * FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index = ? LIMIT 1;
+WHERE wish_id = ? AND id = ? LIMIT 1;
 
 -- name: GetLinks :many
 SELECT * FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-)
-ORDER BY link_index;
-
--- name: GetUnusedLinks :many
-SELECT * FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index >= ?
-ORDER BY link_index;
+WHERE wish_id = ?
+ORDER BY id;
 
 -- name: UpdateLink :exec
 UPDATE links
 SET url = ?
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index = ?;
+WHERE wish_id = ? AND id = ?;
 
 -- name: DeleteLink :exec
 DELETE FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-) AND link_index = ?;
+WHERE wish_id = ? AND id = ?;
 
 -- name: DeleteWishLinks :exec
 DELETE FROM links
-WHERE wish_id = (
-    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
-);
+WHERE wish_id = ?;
 
 -- name: DeleteAllLinks :exec
 DELETE FROM links;
