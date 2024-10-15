@@ -92,7 +92,8 @@ VALUES (
      WHERE wishlist_uuid = ? AND wish_index = ?),
     ?,
     ?
-);
+)
+RETURNING *;
 
 -- name: GetLink :one
 SELECT * FROM links
@@ -126,6 +127,12 @@ DELETE FROM links
 WHERE wish_id = (
     SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
 ) AND link_index = ?;
+
+-- name: DeleteWishLinks :exec
+DELETE FROM links
+WHERE wish_id = (
+    SELECT id FROM wishes WHERE wishlist_uuid = ? AND wish_index = ?
+);
 
 -- name: DeleteAllLinks :exec
 DELETE FROM links;
