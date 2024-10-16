@@ -968,6 +968,9 @@ func loadUserDataFromDB(username string) (userdata, error) {
 	return newUser, nil
 }
 
+// runsOnRPI checks, if the program is currently executed on a raspberry pi. If so, then it will force
+// HTTPS and use the cached letsencrypt certificate.
+// If not, we expect a debug build on the PC and use http and port 8080 for testing reasons.
 func runsOnRPI() bool {
 	file, err := os.Open("/proc/cpuinfo")
 	if err != nil {
@@ -978,11 +981,9 @@ func runsOnRPI() bool {
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		fmt.Println(scanner.Text())
 		s := scanner.Text()
 		if strings.HasPrefix(s, "Serial") {
 			subS := strings.Split(s, ":")
-			fmt.Println(strings.TrimSpace(subS[len(subS)-1]))
 			return strings.TrimSpace(subS[len(subS)-1]) != ""
 		}
 	}
@@ -992,74 +993,74 @@ func runsOnRPI() bool {
 func main() {
 
 	httpsOnly := runsOnRPI()
-	fmt.Println("httpsOnly: ", httpsOnly)
 
-	if false {
-
-		certManager := autocert.Manager{
+	var certManager autocert.Manager
+	var server *http.Server
+	if httpsOnly {
+		certManager = autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
 			Cache:      autocert.DirCache("certs"),
 		}
 
-		server := &http.Server{
+		server = &http.Server{
 			Addr: ":https",
 			TLSConfig: &tls.Config{
 				GetCertificate: certManager.GetCertificate,
 			},
 		}
+	}
 
-		initDatabase()
+	initDatabase()
 
-		// Shows /overview when logged in or /landingpage otherwise
-		http.HandleFunc("/", allHandler)
-		http.HandleFunc("/{uuid}", allHandler)
-		// Shows a generic landing page
-		http.HandleFunc("/landingpage", landingpageHandler)
-		// Shows all available wishlists
-		http.HandleFunc("/overview", overviewHandler)
-		// Shows a specific wishlist
-		http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
-		// Create new wishlist for user
-		http.HandleFunc("/newwishlist", newwishlistHandler)
-		// Show the edit view of a wishlist
-		http.HandleFunc("/editwishlist/{uuid}", editwishlistHandler)
-		// Shows the title of the wishlist instead of the edit version
-		http.HandleFunc("/wishlisttitle/{uuid}", wishlisttitleHandler)
-		// Transfer all changes to the wishlist to the data structure and db
-		http.HandleFunc("/editwishlist/{uuid}/done", editwishlistDoneHandler)
-		// Delete a wishlist
-		http.HandleFunc("/deletewishlist/{uuid}", deletewishlistHandler)
+	// Shows /overview when logged in or /landingpage otherwise
+	http.HandleFunc("/", allHandler)
+	http.HandleFunc("/{uuid}", allHandler)
+	// Shows a generic landing page
+	http.HandleFunc("/landingpage", landingpageHandler)
+	// Shows all available wishlists
+	http.HandleFunc("/overview", overviewHandler)
+	// Shows a specific wishlist
+	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
+	// Create new wishlist for user
+	http.HandleFunc("/newwishlist", newwishlistHandler)
+	// Show the edit view of a wishlist
+	http.HandleFunc("/editwishlist/{uuid}", editwishlistHandler)
+	// Shows the title of the wishlist instead of the edit version
+	http.HandleFunc("/wishlisttitle/{uuid}", wishlisttitleHandler)
+	// Transfer all changes to the wishlist to the data structure and db
+	http.HandleFunc("/editwishlist/{uuid}/done", editwishlistDoneHandler)
+	// Delete a wishlist
+	http.HandleFunc("/deletewishlist/{uuid}", deletewishlistHandler)
 
-		// Reserves a wish given the wishlist uuid and wish index
-		http.HandleFunc("/reserve/{id}", reserveWishHandler)
-		// Creates a new wish. This is just an extended frontend view and will not change any data in the backend.
-		http.HandleFunc("/new", newItemHandler)
+	// Reserves a wish given the wishlist uuid and wish index
+	http.HandleFunc("/reserve/{id}", reserveWishHandler)
+	// Creates a new wish. This is just an extended frontend view and will not change any data in the backend.
+	http.HandleFunc("/new", newItemHandler)
 
-		// Show wish idx of wishlist with a given uuid
-		http.HandleFunc("/item/{id}", itemHandler)
-		// Delete wish idx of wishlist with a given uuid
-		http.HandleFunc("/delete/{id}", deleteHandler)
-		// Show the edit-view of wish idx of wishlist with a given uuid
-		http.HandleFunc("/edit/{id}", editHandler)
-		// Transfer all changes done in the edit of wish idx in wishlist of a given uuid
-		http.HandleFunc("/edit/{id}/done", editDoneHandler)
-		// Add a new link in the current wish edit. This does not need to correspond to a specific wish and
-		// will just extend the edit view by a new link field.
-		http.HandleFunc("/addlink", addLinkHandler)
+	// Show wish idx of wishlist with a given uuid
+	http.HandleFunc("/item/{id}", itemHandler)
+	// Delete wish idx of wishlist with a given uuid
+	http.HandleFunc("/delete/{id}", deleteHandler)
+	// Show the edit-view of wish idx of wishlist with a given uuid
+	http.HandleFunc("/edit/{id}", editHandler)
+	// Transfer all changes done in the edit of wish idx in wishlist of a given uuid
+	http.HandleFunc("/edit/{id}/done", editDoneHandler)
+	// Add a new link in the current wish edit. This does not need to correspond to a specific wish and
+	// will just extend the edit view by a new link field.
+	http.HandleFunc("/addlink", addLinkHandler)
 
-		// Shows a generic login page
-		http.HandleFunc("/loginpage", loginPageHandler)
-		// Handle user login with user/password provided
-		http.HandleFunc("/login", loginHandler)
-		// Handle logout of an active session
-		http.HandleFunc("/logout", logoutHandler)
+	// Shows a generic login page
+	http.HandleFunc("/loginpage", loginPageHandler)
+	// Handle user login with user/password provided
+	http.HandleFunc("/login", loginHandler)
+	// Handle logout of an active session
+	http.HandleFunc("/logout", logoutHandler)
 
-		//http.HandleFunc("readwishlist/{id}", readonlyWishlistHandler)
-		//http.ListenAndServe(":8080", nil)
-
+	if httpsOnly {
 		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
-
 		log.Fatal(server.ListenAndServeTLS("", ""))
+	} else {
+		http.ListenAndServe(":8080", nil)
 	}
 }
