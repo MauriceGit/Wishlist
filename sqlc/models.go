@@ -5,10 +5,9 @@
 package sqlc
 
 type Link struct {
-	ID        int64
-	WishID    int64
-	LinkIndex int64
-	Url       string
+	ID     int64
+	WishID int64
+	Url    string
 }
 
 type User struct {
@@ -19,7 +18,6 @@ type User struct {
 type Wish struct {
 	ID           int64
 	WishlistUuid string
-	WishIndex    int64
 	Name         string
 	Description  string
 	ImageUrl     string
