@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -12,7 +13,9 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"wishlist/sqlc"
@@ -691,7 +694,7 @@ func deleteHandler(w http.ResponseWriter, r *http.Request) {
 func itemHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		id := parseIndex(r.PathValue("id"))
+		id := parseId(r.PathValue("id"))
 
 		// possibly a cancel on a newly created item. Lets just return nothing instead!
 		if id < 0 {
@@ -708,21 +711,17 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
 			return
 		}
-		fmt.Printf("Show item %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+		fmt.Printf("Show item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
-		mu.Lock()
-		defer mu.Unlock()
-		wlIndex := shortcuts[uuid].wishlistIndex
-		wish := users[user].Wishlists[wlIndex].Wishes[idx]
-		writeTemplateWish(w, r, "wish-item", idx, wish, user == shortcuts[uuid].user, shortcuts[uuid].user)
+		writeTemplateWish(w, r, "wish-item", id, users[user].Wishlists[uuid].Wishes[id], true, shortcuts[uuid])
 	}
 }
 
 func editHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		idx := parseIndex(r.PathValue("id"))
-		if idx < 0 {
+		id := parseId(r.PathValue("id"))
+		if id < 0 {
 			return
 		}
 
@@ -732,17 +731,16 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		uuid := r.FormValue("wishlist-uuid")
-		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+		if !checkWishlistUUID(uuid) || shortcuts[uuid] != user {
 			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
 			return
 		}
-		fmt.Printf("Show the edit of item %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+		fmt.Printf("Show the edit of item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
 		if r.Header.Get("HX-Request") == "true" {
-			wlIndex := shortcuts[uuid].wishlistIndex
 			if err := tmplOther.ExecuteTemplate(w, "wish-edit", TemplateWish{
-				Index: idx,
-				Wish:  users[user].Wishlists[wlIndex].Wishes[idx],
+				ID:   id,
+				Wish: users[user].Wishlists[uuid].Wishes[id],
 			}); err != nil {
 				fmt.Println(err)
 			}
@@ -784,8 +782,8 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
 		data := TemplateWish{
-			Index: -1, // An invalid index so that we generate a new item after the OK-button
-			Wish:  Wish{"", "", nil, "", false},
+			ID:   -1, // An invalid index so that we generate a new item after the OK-button
+			Wish: Wish{"", "", nil, "", false},
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
@@ -834,7 +832,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) error {
 	}
 
 	// (Re-)Insert all links from the form into the database! Use the unique ID to make the connection to the wish!
-	for _, l := range r.Form["link"] {
+	for _, l := range links {
 		if l != "" {
 			dbLink, err := dbQueries.CreateLink(ctx, sqlc.CreateLinkParams{wishId, l})
 			if err != nil {
@@ -856,8 +854,8 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) error {
 func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPost {
-		idx := parseIndex(r.PathValue("id"))
-		if idx == -2 {
+		id := parseId(r.PathValue("id"))
+		if id == -2 {
 			http.Error(w, "Unable to parse wish id", http.StatusBadRequest)
 			return
 		}
@@ -868,18 +866,18 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		uuid := r.FormValue("wishlist-uuid")
-		if !checkWishlistUUID(uuid) || shortcuts[uuid].user != user {
+		if !checkWishlistUUID(uuid) || shortcuts[uuid] != user {
 			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
 			return
 		}
-		fmt.Printf("Editing Done for item %v for user '%v' and wishlist with uuid: %v\n", idx, user, uuid)
+		fmt.Printf("Editing Done for item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
 		mu.Lock()
 		defer mu.Unlock()
 
 		reserved := false
-		if idx >= 0 {
-			reserved = users[user].Wishlists[uuid].Wishes[idx].Reserved
+		if id >= 0 {
+			reserved = users[user].Wishlists[uuid].Wishes[id].Reserved
 		}
 
 		tmpWish := Wish{
@@ -889,12 +887,12 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			ImageUrl:    r.FormValue("imageUrl"),
 			Reserved:    reserved,
 		}
-		if err := addWish(uuid, tmpWish, idx, r.form["link"]); err != nil {
+		if err := addWish(uuid, tmpWish, id, r.Form["link"]); err != nil {
 			http.Error(w, "Error updating/adding wish", http.StatusInternalServerError)
 			return
 		}
 
-		writeTemplateWish(w, r, "wish-item", idx, users[user].Wishlists[wlIndex].Wishes[idx], user == shortcuts[uuid].user, shortcuts[uuid].user)
+		writeTemplateWish(w, r, "wish-item", id, users[user].Wishlists[uuid].Wishes[id], true, shortcuts[uuid])
 	}
 }
 
@@ -914,115 +912,6 @@ func initDatabase() {
 	}
 
 	dbQueries = sqlc.New(db)
-}
-
-func populateDatabase() {
-
-	dbQueries.DeleteAllUsers(ctx)
-	dbQueries.DeleteAllWishlists(ctx)
-	dbQueries.DeleteAllWishes(ctx)
-	dbQueries.DeleteAllLinks(ctx)
-
-	err, mUUID := newUUID()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	err, mUUID2 := newUUID()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	mWishlist := Wishlist{
-		Title: "Wunschliste",
-		UUID:  mUUID,
-		Wishes: []Wish{
-			{"Neuseeland", "Eine Reise nach Neuseeland", []string{"http://link1.com"}, defaultImage, false},
-			{"Liebe", "Eine Maus, die mich lieb hat!", []string{"http://link1.com", "https://link2.de/blubb"}, "", true},
-			{"Bär", "Ein liebes Glücksbärchen", nil, defaultImage, false},
-		},
-	}
-	mWishlist2 := Wishlist{
-		Title: "Geburtstags-Wunschliste",
-		UUID:  mUUID2,
-		Wishes: []Wish{
-			{"A new webcam", "I just thought of the Logitech Brio 500...", []string{"https://www.amazon.de/dp/B07W5JKKFJ"}, "", false},
-		},
-	}
-	gold := "https://www.muenzeoesterreich.at/var/em_plain_site/storage/images/_aliases/product_full/media/bilder/produktbilder/1.anlegen/handelsgold_mtt/1fach-dukaten-av/9572-4-ger-DE/1fach-dukaten-av.png"
-	kinderwagen := "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fi.otto.de%2Fi%2Fotto%2F16455872-f2bb-5a61-bfb2-261f5713a79a%3Fh%26%2361%3B520%26amp%3Bw%2661%3B551%26amp%3Bsm%2661%3Bclamp&f=1&nofb=1&ipt=492a936d362bfd9dfa8095c11c15251238c529f986d731b49d66a8a3f162df81&ipo=images"
-	err, nUUID := newUUID()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	nWishlist := Wishlist{
-		Title: "Nadines Wunschliste",
-		UUID:  nUUID,
-		Wishes: []Wish{
-			{"Ganz viel Gold und Reichtum", "Oder so. Ich muss da nochmal nachfragen :)", []string{"gold.de"}, gold, false},
-			{"Ein Spaziergehpapabärchen", "Am liebsten jeden Morgen und nachmittags nochmal!", nil, kinderwagen, true},
-			{"Ein frisch gesaugtes Bad und Schlafzimmer", "Das hätte ich gerne zu Weihnachten", nil, defaultImage, false},
-		},
-	}
-	users["Maurice"] = userdata{
-		passwordHash: hashPassword("Maurice", "passwort"),
-		Wishlists:    []Wishlist{mWishlist, mWishlist2},
-	}
-	users["Nadine"] = userdata{
-		passwordHash: hashPassword("Nadine", "passwort"),
-		Wishlists:    []Wishlist{nWishlist},
-	}
-
-	shortcuts[mUUID] = shortcut{"Maurice", 0}
-	shortcuts[mUUID2] = shortcut{"Maurice", 1}
-	shortcuts[nUUID] = shortcut{"Nadine", 0}
-
-	for username, data := range users {
-		// Add user if it doesn't exist
-		if _, err := dbQueries.GetUser(ctx, username); err != nil {
-			if err := dbQueries.CreateUser(ctx, sqlc.CreateUserParams{username, data.passwordHash}); err != nil {
-				fmt.Println(err)
-			}
-		}
-
-		for _, wl := range data.Wishlists {
-			// Add wishlist if it doesn't exist!
-			if _, err := dbQueries.GetWishlist(ctx, wl.UUID); err != nil {
-				if err := dbQueries.CreateWishlist(ctx, sqlc.CreateWishlistParams{wl.UUID, username, wl.Title}); err != nil {
-					fmt.Println(err)
-				}
-			}
-
-			for wIndex, w := range wl.Wishes {
-				reserved := int64(0)
-				if w.Reserved {
-					reserved = 1
-				}
-				// Add wish if it doesn't exist
-				if _, err := dbQueries.GetWish(ctx, sqlc.GetWishParams{wl.UUID, int64(wIndex)}); err != nil {
-					if err := dbQueries.CreateWish(ctx, sqlc.CreateWishParams{
-						WishlistUuid: wl.UUID,
-						WishIndex:    int64(wIndex),
-						Name:         w.Name,
-						Description:  w.Description,
-						ImageUrl:     w.ImageUrl,
-						Reserved:     reserved,
-					}); err != nil {
-						fmt.Println(err)
-					}
-				}
-
-				for lIndex, link := range w.Links {
-					if _, err := dbQueries.GetLink(ctx, sqlc.GetLinkParams{wl.UUID, int64(wIndex), int64(lIndex)}); err != nil {
-						if err := dbQueries.CreateLink(ctx, sqlc.CreateLinkParams{wl.UUID, int64(wIndex), int64(lIndex), link}); err != nil {
-							fmt.Println(err)
-						}
-					}
-				}
-			}
-		}
-	}
 }
 
 func loadUserDataFromDB(username string) (userdata, error) {
@@ -1053,113 +942,124 @@ func loadUserDataFromDB(username string) (userdata, error) {
 			return newUser, err
 		}
 
-		for wIndex, w := range dbWishes {
+		for _, w := range dbWishes {
 			var wish Wish
 			wish.Description = w.Description
 			wish.ImageUrl = w.ImageUrl
 			wish.Name = w.Name
 			wish.Reserved = w.Reserved != 0
 
-			dbLinks, err := dbQueries.GetLinks(ctx, sqlc.GetLinksParams{wl.Uuid, int64(wIndex)})
+			dbLinks, err := dbQueries.GetLinks(ctx, w.ID)
 			if err != nil {
 				fmt.Println(err)
 				return newUser, err
 			}
 
 			for _, l := range dbLinks {
-				wish.Links = append(wish.Links, l.Url)
+				wish.Links[l.ID] = l.Url
 			}
 
-			wishlist.Wishes = append(wishlist.Wishes, wish)
+			wishlist.Wishes[w.ID] = wish
 		}
 
-		newUser.Wishlists = append(newUser.Wishlists, wishlist)
+		newUser.Wishlists[wl.Uuid] = wishlist
 	}
 
 	return newUser, nil
 }
 
-func populateDataStructures() {
-
-	dbUsers, err := dbQueries.GetUsers(ctx)
+func runsOnRPI() bool {
+	file, err := os.Open("/proc/cpuinfo")
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("RPI-Check: Opening /proc/cpuinfo failed: %v\n", err)
+		return false
 	}
-	for _, user := range dbUsers {
-		if newUser, err := loadUserDataFromDB(user.Name); err == nil {
-			users[user.Name] = newUser
-			for wlIndex, wl := range users[user.Name].Wishlists {
-				shortcuts[wl.UUID] = shortcut{user.Name, wlIndex}
-			}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		fmt.Println(scanner.Text())
+		s := scanner.Text()
+		if strings.HasPrefix(s, "Serial") {
+			subS := strings.Split(s, ":")
+			fmt.Println(subS)
+			return strings.TrimSpace(subS[len(subS)-1]) != ""
 		}
 	}
+	return false
 }
 
 func main() {
 
-	certManager := autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
-		Cache:      autocert.DirCache("certs"),
+	httpsOnly := runsOnRPI()
+	fmt.Println("httpsOnly: ", httpsOnly)
+
+	if false {
+
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
+			Cache:      autocert.DirCache("certs"),
+		}
+
+		server := &http.Server{
+			Addr: ":https",
+			TLSConfig: &tls.Config{
+				GetCertificate: certManager.GetCertificate,
+			},
+		}
+
+		initDatabase()
+
+		// Shows /overview when logged in or /landingpage otherwise
+		http.HandleFunc("/", allHandler)
+		http.HandleFunc("/{uuid}", allHandler)
+		// Shows a generic landing page
+		http.HandleFunc("/landingpage", landingpageHandler)
+		// Shows all available wishlists
+		http.HandleFunc("/overview", overviewHandler)
+		// Shows a specific wishlist
+		http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
+		// Create new wishlist for user
+		http.HandleFunc("/newwishlist", newwishlistHandler)
+		// Show the edit view of a wishlist
+		http.HandleFunc("/editwishlist/{uuid}", editwishlistHandler)
+		// Shows the title of the wishlist instead of the edit version
+		http.HandleFunc("/wishlisttitle/{uuid}", wishlisttitleHandler)
+		// Transfer all changes to the wishlist to the data structure and db
+		http.HandleFunc("/editwishlist/{uuid}/done", editwishlistDoneHandler)
+		// Delete a wishlist
+		http.HandleFunc("/deletewishlist/{uuid}", deletewishlistHandler)
+
+		// Reserves a wish given the wishlist uuid and wish index
+		http.HandleFunc("/reserve/{id}", reserveWishHandler)
+		// Creates a new wish. This is just an extended frontend view and will not change any data in the backend.
+		http.HandleFunc("/new", newItemHandler)
+
+		// Show wish idx of wishlist with a given uuid
+		http.HandleFunc("/item/{id}", itemHandler)
+		// Delete wish idx of wishlist with a given uuid
+		http.HandleFunc("/delete/{id}", deleteHandler)
+		// Show the edit-view of wish idx of wishlist with a given uuid
+		http.HandleFunc("/edit/{id}", editHandler)
+		// Transfer all changes done in the edit of wish idx in wishlist of a given uuid
+		http.HandleFunc("/edit/{id}/done", editDoneHandler)
+		// Add a new link in the current wish edit. This does not need to correspond to a specific wish and
+		// will just extend the edit view by a new link field.
+		http.HandleFunc("/addlink", addLinkHandler)
+
+		// Shows a generic login page
+		http.HandleFunc("/loginpage", loginPageHandler)
+		// Handle user login with user/password provided
+		http.HandleFunc("/login", loginHandler)
+		// Handle logout of an active session
+		http.HandleFunc("/logout", logoutHandler)
+
+		//http.HandleFunc("readwishlist/{id}", readonlyWishlistHandler)
+		//http.ListenAndServe(":8080", nil)
+
+		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
+
+		log.Fatal(server.ListenAndServeTLS("", ""))
 	}
-
-	server := &http.Server{
-		Addr: ":https",
-		TLSConfig: &tls.Config{
-			GetCertificate: certManager.GetCertificate,
-		},
-	}
-
-	initDatabase()
-
-	// Shows /overview when logged in or /landingpage otherwise
-	http.HandleFunc("/", allHandler)
-	http.HandleFunc("/{uuid}", allHandler)
-	// Shows a generic landing page
-	http.HandleFunc("/landingpage", landingpageHandler)
-	// Shows all available wishlists
-	http.HandleFunc("/overview", overviewHandler)
-	// Shows a specific wishlist
-	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
-	// Create new wishlist for user
-	http.HandleFunc("/newwishlist", newwishlistHandler)
-	// Show the edit view of a wishlist
-	http.HandleFunc("/editwishlist/{uuid}", editwishlistHandler)
-	// Shows the title of the wishlist instead of the edit version
-	http.HandleFunc("/wishlisttitle/{uuid}", wishlisttitleHandler)
-	// Transfer all changes to the wishlist to the data structure and db
-	http.HandleFunc("/editwishlist/{uuid}/done", editwishlistDoneHandler)
-	// Delete a wishlist
-	http.HandleFunc("/deletewishlist/{uuid}", deletewishlistHandler)
-
-	// Reserves a wish given the wishlist uuid and wish index
-	http.HandleFunc("/reserve/{id}", reserveWishHandler)
-	// Creates a new wish. This is just an extended frontend view and will not change any data in the backend.
-	http.HandleFunc("/new", newItemHandler)
-
-	// Show wish idx of wishlist with a given uuid
-	http.HandleFunc("/item/{id}", itemHandler)
-	// Delete wish idx of wishlist with a given uuid
-	http.HandleFunc("/delete/{id}", deleteHandler)
-	// Show the edit-view of wish idx of wishlist with a given uuid
-	http.HandleFunc("/edit/{id}", editHandler)
-	// Transfer all changes done in the edit of wish idx in wishlist of a given uuid
-	http.HandleFunc("/edit/{id}/done", editDoneHandler)
-	// Add a new link in the current wish edit. This does not need to correspond to a specific wish and
-	// will just extend the edit view by a new link field.
-	http.HandleFunc("/addlink", addLinkHandler)
-
-	// Shows a generic login page
-	http.HandleFunc("/loginpage", loginPageHandler)
-	// Handle user login with user/password provided
-	http.HandleFunc("/login", loginHandler)
-	// Handle logout of an active session
-	http.HandleFunc("/logout", logoutHandler)
-
-	//http.HandleFunc("readwishlist/{id}", readonlyWishlistHandler)
-	//http.ListenAndServe(":8080", nil)
-
-	go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
-
-	log.Fatal(server.ListenAndServeTLS("", ""))
 }
