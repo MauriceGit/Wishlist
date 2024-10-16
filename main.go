@@ -982,7 +982,7 @@ func runsOnRPI() bool {
 		s := scanner.Text()
 		if strings.HasPrefix(s, "Serial") {
 			subS := strings.Split(s, ":")
-			fmt.Println(subS)
+			fmt.Println(strings.TrimSpace(subS[len(subS)-1]))
 			return strings.TrimSpace(subS[len(subS)-1]) != ""
 		}
 	}
