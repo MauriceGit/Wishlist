@@ -587,7 +587,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		if !bytes.Equal(pHash, userData.passwordHash) {
 			fmt.Printf("User '%v' exists, but wrong password.\n", user)
-			w.WriteHeader(http.StatusUnauthorized)
+			w.WriteHeader(http.StatusOK)
 			if err := tmplOther.ExecuteTemplate(w, "login-error", nil); err != nil {
 				fmt.Println(err)
 			}
@@ -665,6 +665,59 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func updatePassword(user, password string) {
+	tmpUserdata := users[user]
+	tmpUserdata.passwordHash = hashPassword(user, password)
+	users[user] = tmpUserdata
+
+	if err := dbQueries.UpdatePassword(ctx, sqlc.UpdatePasswordParams{tmpUserdata.passwordHash, user}); err != nil {
+		fmt.Printf("Error updating password in db: %v\n", err)
+	}
+}
+
+func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("pling")
+	if user, ok := handleUserAuthentication(w, r); ok {
+
+		switch r.Method {
+		case http.MethodGet:
+
+			if r.Header.Get("HX-Request") == "true" {
+				if err := tmplOther.ExecuteTemplate(w, "changepassword", nil); err != nil {
+					fmt.Println(err)
+				}
+				return
+			}
+
+		case http.MethodPost:
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Unable to parse form", http.StatusBadRequest)
+				return
+			}
+			fmt.Println(r.Form)
+			oldHash := hashPassword(user, r.FormValue("old-password"))
+			newPassword1 := r.FormValue("new-password1")
+			newPassword2 := r.FormValue("new-password2")
+
+			// Wrong old password or New passwords are different
+			if !bytes.Equal(oldHash, users[user].passwordHash) || newPassword1 != newPassword2 {
+				if r.Header.Get("HX-Request") == "true" {
+					if err := tmplOther.ExecuteTemplate(w, "changepassword-error", nil); err != nil {
+						fmt.Println(err)
+					}
+					return
+				}
+			}
+
+			updatePassword(user, newPassword1)
+
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(http.StatusOK)
+		}
+
 	}
 }
 
@@ -1063,6 +1116,8 @@ func main() {
 	http.HandleFunc("/login", loginHandler)
 	// Handle logout of an active session
 	http.HandleFunc("/logout", logoutHandler)
+	// Change password page and actual data input handler. Get/Post
+	http.HandleFunc("/changepassword", changepasswordHandler)
 
 	if httpsOnly {
 		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))

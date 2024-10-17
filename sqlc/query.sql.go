@@ -411,6 +411,22 @@ func (q *Queries) UpdateLink(ctx context.Context, arg UpdateLinkParams) error {
 	return err
 }
 
+const updatePassword = `-- name: UpdatePassword :exec
+UPDATE users
+SET passwordhash = ?
+WHERE name = ?
+`
+
+type UpdatePasswordParams struct {
+	Passwordhash []byte
+	Name         string
+}
+
+func (q *Queries) UpdatePassword(ctx context.Context, arg UpdatePasswordParams) error {
+	_, err := q.db.ExecContext(ctx, updatePassword, arg.Passwordhash, arg.Name)
+	return err
+}
+
 const updateWish = `-- name: UpdateWish :exec
 UPDATE wishes
 SET name = ?,

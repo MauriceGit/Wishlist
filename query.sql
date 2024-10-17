@@ -6,6 +6,11 @@ INSERT INTO users (
     ?, ?
 );
 
+-- name: UpdatePassword :exec
+UPDATE users
+SET passwordhash = ?
+WHERE name = ?;
+
 -- name: GetUser :one
 SELECT * FROM users
 WHERE name = ? LIMIT 1;
