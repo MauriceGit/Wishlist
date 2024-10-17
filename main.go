@@ -937,7 +937,7 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 		tmpWish := Wish{
 			Name:        r.FormValue("name"),
 			Description: r.FormValue("description"),
-			Links:       nil,
+			Links:       make(map[int64]string),
 			ImageUrl:    r.FormValue("imageUrl"),
 			Reserved:    reserved,
 		}
