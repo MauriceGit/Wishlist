@@ -17,48 +17,34 @@
 </head>
 <body class="bg-gray-100">
 
-    <nav class="flex items-center justify-between flex-wrap bg-pink-700 p-6">
-        <div class="flex items-center flex-shrink-0 text-white mr-6">
-            <!--<svg class="fill-current h-8 w-8 mr-2" width="54" height="54" viewBox="0 0 54 54" xmlns="http://www.w3.org/2000/svg">
-                <path d="M13.5 22.1c1.8-7.2 6.3-10.8 13.5-10.8 10.8 0 12.15 8.1 17.55 9.45 3.6.9 6.75-.45 9.45-4.05-1.8 7.2-6.3 10.8-13.5 10.8-10.8 0-12.15-8.1-17.55-9.45-3.6-.9-6.75.45-9.45 4.05zM0 38.3c1.8-7.2 6.3-10.8 13.5-10.8 10.8 0 12.15 8.1 17.55 9.45 3.6.9 6.75-.45 9.45-4.05-1.8 7.2-6.3 10.8-13.5 10.8-10.8 0-12.15-8.1-17.55-9.45-3.6-.9-6.75.45-9.45 4.05z"/>
-            </svg>-->
-            <a href="/landingpage" hx-get="/landingpage" hx-target="#main-content" hx-swap="innerHTML" class="font-semibold text-3xl tracking-tight">Wünsche Ahoi</a>
-        </div>
-        <div class="block lg:hidden">
-            <button onclick="toggleMenu()" class="flex items-center px-3 py-2 border rounded text-purple-100 border-purple-200 hover:text-white hover:border-white">
-                <svg class="fill-current h-3 w-3" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                    <title>Menu</title>
-                    <path d="M0 3h20v2H0V3zm0 6h20v2H0V9zm0 6h20v2H0v-2z"/>
-                </svg>
-            </button>
-        </div>
-        <div id="mobile-menu" class="w-full block flex-grow lg:flex lg:items-center lg:w-auto hidden lg:block">
-            <div class="text-xl lg:flex-grow">
-                <a href="/overview" hx-get="/overview" hx-target="#main-content" hx-swap="innerHTML" class="block mt-4 lg:inline-block lg:mt-0 text-purple-100 hover:text-white mr-4">
-                    Meine Wunschlisten
-                </a>
-                <a class="block mt-4 lg:inline-block lg:mt-0 text-purple-100 hover:text-white mr-4">
-                    Reservierte Wünsche
-                </a>
-            </div>
+    <nav class="bg-pink-700 w-full text-white py-4 relative">
+        <div class="container mx-auto flex justify-between items-center">
+            <!-- Left side: Welcome link -->
+            <a href="/" class="px-6 font-semibold text-3xl tracking-tight text-white">Wünsche Ahoi</a>
 
-            {{$page := "/loginpage"}}
-            {{if .Authenticated}}
-                {{$page = "/logout"}}
-            {{end}}
-            <div class="flex flex-col lg:flex-row lg:items-center lg:space-x-4 mt-4 lg:mt-0">
+            <!-- Right side: Dropdown menu trigger and menu -->
+            <div class="relative"> <!-- Add relative to container of the button -->
+                <button id="account-menu" class="text-xl px-6 text-purple-100 hover:text-white focus:outline-none">
+                    Mein Konto
+                    <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
 
-                <a href="/changepassword" hx-get="/changepassword" hx-target="#main-content" hx-swap="innerHTML" class="text-xl lg:inline-block text-purple-100 hover:text-white">
-                    Change Password
-                </a>
-
-                <a href="{{$page}}" hx-get="{{$page}}" hx-target="#main-content" hx-swap="innerHTML" class="text-xl lg:inline-block text-purple-100 hover:text-white">
-                    {{if .Authenticated}}
-                        Logout ({{.Username}})
-                    {{else}}
-                        Login
+                <!-- Dropdown Content -->
+                <div id="dropdown" class="hidden absolute right-0 mt-5 w-screen lg:w-72 text-xl text-purple-100 hover:text-white lg:text-gray-700 lg:hover:text-gray-800 font-medium bg-pink-700 lg:bg-pink-300 shadow-lg py-4 px-2 z-50"> <!-- Set w-screen for mobile -->
+                    {{if not .Authenticated}}
+                        <a {{if not .Authenticated}}href="/loginpage" hx-get="loginpage" hx-target="#main-content" hx-swap="innerHTML"{{end}} class="block px-4 py-2">
+                            Login
+                        </a>
                     {{end}}
-                </a>
+
+                    {{if .Authenticated}}
+                        <a href="/overview" hx-get="/overview" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Meine Wunschlisten</a>
+                        <a href="/changepassword" hx-get="/changepassword" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Passwort ändern</a>
+                        <a href="/logout" hx-get="logout" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Logout ({{.Username}})</a>
+                    {{end}}
+                </div>
             </div>
         </div>
     </nav>
@@ -74,6 +60,20 @@
             {{end}}
         {{*/}}
     </div>
+
+    <script>
+        document.getElementById('account-menu').addEventListener('click', function () {
+            var dropdown = document.getElementById('dropdown');
+            dropdown.classList.toggle('hidden');
+        });
+
+        // Close dropdown when clicked outside
+        window.addEventListener('click', function(e) {
+            if (!document.getElementById('account-menu').contains(e.target)) {
+                document.getElementById('dropdown').classList.add('hidden');
+            }
+        });
+    </script>
 
 </body>
 </html>

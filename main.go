@@ -583,6 +583,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
+			// Reload the user data because for the first try, there wasn't any user data loaded from the db yet.
+			userData, _ = users[user]
 		}
 
 		if !bytes.Equal(pHash, userData.passwordHash) {
@@ -679,19 +681,17 @@ func updatePassword(user, password string) {
 }
 
 func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("pling")
+
 	if user, ok := handleUserAuthentication(w, r); ok {
 
 		switch r.Method {
 		case http.MethodGet:
-
 			if r.Header.Get("HX-Request") == "true" {
 				if err := tmplOther.ExecuteTemplate(w, "changepassword", nil); err != nil {
 					fmt.Println(err)
 				}
 				return
 			}
-
 		case http.MethodPost:
 			if err := r.ParseForm(); err != nil {
 				http.Error(w, "Unable to parse form", http.StatusBadRequest)
