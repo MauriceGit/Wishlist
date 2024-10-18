@@ -339,20 +339,26 @@ func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, e
 }
 
 const getWishlist = `-- name: GetWishlist :one
-SELECT uuid, user_name, title FROM wishlists
+SELECT uuid, user_name, title, timestamp FROM wishlists
 WHERE uuid = ? LIMIT 1
 `
 
 func (q *Queries) GetWishlist(ctx context.Context, uuid string) (Wishlist, error) {
 	row := q.db.QueryRowContext(ctx, getWishlist, uuid)
 	var i Wishlist
-	err := row.Scan(&i.Uuid, &i.UserName, &i.Title)
+	err := row.Scan(
+		&i.Uuid,
+		&i.UserName,
+		&i.Title,
+		&i.Timestamp,
+	)
 	return i, err
 }
 
 const getWishlists = `-- name: GetWishlists :many
-SELECT uuid, user_name, title FROM wishlists
+SELECT uuid, user_name, title, timestamp FROM wishlists
 WHERE user_name = ?
+ORDER BY timestamp
 `
 
 func (q *Queries) GetWishlists(ctx context.Context, userName string) ([]Wishlist, error) {
@@ -364,7 +370,12 @@ func (q *Queries) GetWishlists(ctx context.Context, userName string) ([]Wishlist
 	var items []Wishlist
 	for rows.Next() {
 		var i Wishlist
-		if err := rows.Scan(&i.Uuid, &i.UserName, &i.Title); err != nil {
+		if err := rows.Scan(
+			&i.Uuid,
+			&i.UserName,
+			&i.Title,
+			&i.Timestamp,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

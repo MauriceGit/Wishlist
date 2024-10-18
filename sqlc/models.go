@@ -4,6 +4,10 @@
 
 package sqlc
 
+import (
+	"database/sql"
+)
+
 type Link struct {
 	ID     int64
 	WishID int64
@@ -25,7 +29,8 @@ type Wish struct {
 }
 
 type Wishlist struct {
-	Uuid     string
-	UserName string
-	Title    string
+	Uuid      string
+	UserName  string
+	Title     string
+	Timestamp sql.NullTime
 }
