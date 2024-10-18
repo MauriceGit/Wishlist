@@ -38,7 +38,8 @@ WHERE uuid = ? LIMIT 1;
 
 -- name: GetWishlists :many
 SELECT * FROM wishlists
-WHERE user_name = ?;
+WHERE user_name = ?
+ORDER BY timestamp;
 
 -- name: UpdateWishlist :exec
 UPDATE wishlists

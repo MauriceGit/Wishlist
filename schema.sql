@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS wishlists (
     uuid TEXT NOT NULL PRIMARY KEY,
     user_name TEXT NOT NULL,
     title TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_name) REFERENCES users(name) ON DELETE CASCADE
 );
 
