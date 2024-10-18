@@ -190,6 +190,7 @@ func createNewWishlist(user string) error {
 	var wishlist Wishlist
 	wishlist.UUID = uuid
 	wishlist.Title = fmt.Sprintf("Wishlist %v", len(users[user].Wishlists))
+	wishlist.Wishes = make(map[int64]Wish)
 	users[user].Wishlists[uuid] = wishlist
 	shortcuts[uuid] = user
 
@@ -314,6 +315,26 @@ func loadUserFromDB(user string) bool {
 		return true
 	}
 	return false
+}
+
+func updatePassword(user, password string) {
+	tmpUserdata := users[user]
+	tmpUserdata.passwordHash = hashPassword(user, password)
+	users[user] = tmpUserdata
+
+	if err := dbQueries.UpdatePassword(ctx, sqlc.UpdatePasswordParams{tmpUserdata.passwordHash, user}); err != nil {
+		fmt.Printf("Error updating password in db: %v\n", err)
+	}
+}
+
+func createNewUser(user, password string) {
+	users[user] = userdata{
+		passwordHash: hashPassword(user, password),
+		Wishlists:    make(map[string]Wishlist),
+	}
+	if err := dbQueries.CreateUser(ctx, sqlc.CreateUserParams{user, users[user].passwordHash}); err != nil {
+		fmt.Printf("Error creating new user in db: %v\n", err)
+	}
 }
 
 // =====================================================================================================================
@@ -670,16 +691,6 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func updatePassword(user, password string) {
-	tmpUserdata := users[user]
-	tmpUserdata.passwordHash = hashPassword(user, password)
-	users[user] = tmpUserdata
-
-	if err := dbQueries.UpdatePassword(ctx, sqlc.UpdatePasswordParams{tmpUserdata.passwordHash, user}); err != nil {
-		fmt.Printf("Error updating password in db: %v\n", err)
-	}
-}
-
 func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok {
@@ -697,7 +708,6 @@ func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Unable to parse form", http.StatusBadRequest)
 				return
 			}
-			fmt.Println(r.Form)
 			oldHash := hashPassword(user, r.FormValue("old-password"))
 			newPassword1 := r.FormValue("new-password1")
 			newPassword2 := r.FormValue("new-password2")
@@ -721,6 +731,39 @@ func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func newuserHandler(w http.ResponseWriter, r *http.Request) {
+
+	if user, ok := handleUserAuthentication(w, r); ok {
+		// Make sure ONLY I can create new users right now.
+		if user != "Maurice" {
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			if r.Header.Get("HX-Request") == "true" {
+				if err := tmplOther.ExecuteTemplate(w, "newuser", nil); err != nil {
+					fmt.Println(err)
+				}
+				return
+			}
+		case http.MethodPost:
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Unable to parse form", http.StatusBadRequest)
+				return
+			}
+			newUser := r.FormValue("email")
+			newPassword := r.FormValue("password")
+
+			// If the username is not empty and the user doesn't exist yet
+			if _, ok := users[newUser]; !ok && newUser != "" {
+				createNewUser(newUser, newPassword)
+			}
+		}
+		w.Header().Set("HX-Redirect", "/")
+		w.WriteHeader(http.StatusOK)
+	}
+}
 func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, id int64, wish Wish, isCreator bool, creator string) {
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -1118,6 +1161,8 @@ func main() {
 	http.HandleFunc("/logout", logoutHandler)
 	// Change password page and actual data input handler. Get/Post
 	http.HandleFunc("/changepassword", changepasswordHandler)
+	// Create new user. This is shown to limited users
+	http.HandleFunc("/newuser", newuserHandler)
 
 	if httpsOnly {
 		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
