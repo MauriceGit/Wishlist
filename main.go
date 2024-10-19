@@ -129,7 +129,7 @@ func newUUID() (error, string) {
 		fmt.Println("Error: ", err)
 		return err, ""
 	}
-	return nil, fmt.Sprintf("%X", b)
+	return nil, fmt.Sprintf("%v-%X", time.Now().Unix(), b)
 }
 
 func hashPassword(user, password string) []byte {
@@ -198,6 +198,7 @@ func createNewWishlist(user string) error {
 		fmt.Printf("Creating DB wishlist failed: %v\n", err)
 		return err
 	}
+
 	return nil
 }
 
