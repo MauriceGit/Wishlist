@@ -1165,6 +1165,10 @@ func main() {
 	// Create new user. This is shown to limited users
 	http.HandleFunc("/newuser", newuserHandler)
 
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./favicon.ico")
+	})
+
 	if httpsOnly {
 		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
 		log.Fatal(server.ListenAndServeTLS("", ""))
