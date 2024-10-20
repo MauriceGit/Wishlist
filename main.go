@@ -98,6 +98,8 @@ var (
 	ctx       = context.Background()
 	db        *sql.DB
 	dbQueries *sqlc.Queries
+
+	httpsOnly = true
 )
 
 func (s *session) isExpired() bool {
@@ -638,14 +640,21 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Printf("New session for user '%v'\n", user)
 
+		sameSite := http.SameSiteStrictMode
+		secure := true
+		if !httpsOnly {
+			sameSite = http.SameSiteLaxMode
+			secure = false
+		}
+
 		http.SetCookie(w, &http.Cookie{
 			Name:     "session_token",
 			Value:    sessionToken,
 			Expires:  sessionExpire,
-			Path:     "/",                  // Ensures the cookie is available throughout the site
-			SameSite: http.SameSiteLaxMode, // Use Lax, or change to Strict or None as per your needs
-			Secure:   false,                // Must be true if SameSite=None (requires HTTPS)
-			HttpOnly: true,                 // Prevents JavaScript from accessing the cookie
+			Path:     "/",      // Ensures the cookie is available throughout the site
+			SameSite: sameSite, // Use Lax, or change to Strict or None as per your needs
+			Secure:   secure,   // Must be true if SameSite=None (requires HTTPS)
+			HttpOnly: true,     // Prevents JavaScript from accessing the cookie
 		})
 
 		// User authenticated and everything is OK
@@ -675,6 +684,13 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 		// remove userdata from memory. Must be reloaded from db the next time this user logs in
 		delete(users, user)
 
+		sameSite := http.SameSiteStrictMode
+		secure := true
+		if !httpsOnly {
+			sameSite = http.SameSiteLaxMode
+			secure = false
+		}
+
 		// We need to let the client know that the cookie is expired
 		// In the response, we set the session token to an empty
 		// value and set its expiry as the current time
@@ -682,10 +698,10 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 			Name:     "session_token",
 			Value:    "",
 			Expires:  time.Now(),
-			Path:     "/",                  // Ensures the cookie is available throughout the site
-			SameSite: http.SameSiteLaxMode, // Use Lax, or change to Strict or None as per your needs
-			Secure:   false,                // Must be true if SameSite=None (requires HTTPS)
-			HttpOnly: true,                 // Prevents JavaScript from accessing the cookie
+			Path:     "/",      // Ensures the cookie is available throughout the site
+			SameSite: sameSite, // Use Lax, or change to Strict or None as per your needs
+			Secure:   secure,   // Must be true if SameSite=None (requires HTTPS)
+			HttpOnly: true,     // Prevents JavaScript from accessing the cookie
 		})
 
 		w.Header().Set("HX-Redirect", "/")
@@ -1099,7 +1115,7 @@ func runsOnRPI() bool {
 
 func main() {
 
-	httpsOnly := runsOnRPI()
+	httpsOnly = runsOnRPI()
 
 	var certManager autocert.Manager
 	var server *http.Server
