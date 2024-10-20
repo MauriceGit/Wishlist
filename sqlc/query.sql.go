@@ -51,11 +51,11 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 
 const createWish = `-- name: CreateWish :one
 INSERT INTO wishes(
-    wishlist_uuid, name, description, image_url, reserved
+    wishlist_uuid, name, description, image_url, reserved, active
 ) VALUES (
-    ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?
 )
-RETURNING id, wishlist_uuid, name, description, image_url, reserved
+RETURNING id, wishlist_uuid, name, description, image_url, reserved, active
 `
 
 type CreateWishParams struct {
@@ -64,6 +64,7 @@ type CreateWishParams struct {
 	Description  string
 	ImageUrl     string
 	Reserved     int64
+	Active       int64
 }
 
 func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, error) {
@@ -73,6 +74,7 @@ func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, e
 		arg.Description,
 		arg.ImageUrl,
 		arg.Reserved,
+		arg.Active,
 	)
 	var i Wish
 	err := row.Scan(
@@ -82,6 +84,7 @@ func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, e
 		&i.Description,
 		&i.ImageUrl,
 		&i.Reserved,
+		&i.Active,
 	)
 	return i, err
 }
@@ -284,7 +287,7 @@ func (q *Queries) GetUsers(ctx context.Context) ([]User, error) {
 }
 
 const getWish = `-- name: GetWish :one
-SELECT id, wishlist_uuid, name, description, image_url, reserved FROM wishes
+SELECT id, wishlist_uuid, name, description, image_url, reserved, active FROM wishes
 WHERE id = ? LIMIT 1
 `
 
@@ -298,12 +301,13 @@ func (q *Queries) GetWish(ctx context.Context, id int64) (Wish, error) {
 		&i.Description,
 		&i.ImageUrl,
 		&i.Reserved,
+		&i.Active,
 	)
 	return i, err
 }
 
 const getWishes = `-- name: GetWishes :many
-SELECT id, wishlist_uuid, name, description, image_url, reserved FROM wishes
+SELECT id, wishlist_uuid, name, description, image_url, reserved, active FROM wishes
 WHERE wishlist_uuid = ?
 ORDER BY id
 `
@@ -324,6 +328,7 @@ func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, e
 			&i.Description,
 			&i.ImageUrl,
 			&i.Reserved,
+			&i.Active,
 		); err != nil {
 			return nil, err
 		}
@@ -443,7 +448,8 @@ UPDATE wishes
 SET name = ?,
     description = ?,
     image_url = ?,
-    reserved = ?
+    reserved = ?,
+    active = ?
 WHERE id = ?
 `
 
@@ -452,6 +458,7 @@ type UpdateWishParams struct {
 	Description string
 	ImageUrl    string
 	Reserved    int64
+	Active      int64
 	ID          int64
 }
 
@@ -461,6 +468,7 @@ func (q *Queries) UpdateWish(ctx context.Context, arg UpdateWishParams) error {
 		arg.Description,
 		arg.ImageUrl,
 		arg.Reserved,
+		arg.Active,
 		arg.ID,
 	)
 	return err

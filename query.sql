@@ -56,9 +56,9 @@ WHERE user_name = ?;
 
 -- name: CreateWish :one
 INSERT INTO wishes(
-    wishlist_uuid, name, description, image_url, reserved
+    wishlist_uuid, name, description, image_url, reserved, active
 ) VALUES (
-    ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?
 )
 RETURNING *;
 
@@ -76,7 +76,8 @@ UPDATE wishes
 SET name = ?,
     description = ?,
     image_url = ?,
-    reserved = ?
+    reserved = ?,
+    active = ?
 WHERE id = ?;
 
 -- name: SetWishReserve :exec

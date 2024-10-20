@@ -61,7 +61,9 @@
     <div class="grid grid-cols-1 gap-4">
         {{$iscreator := .IsCreator}}
         {{range $id, $wish := .Wishes}}
-            {{template "wish-item" (.BundleID $id $iscreator)}}
+            {{if or $iscreator .Active}}
+                {{template "wish-item" (.BundleID $id $iscreator)}}
+            {{end}}
         {{end}}
         <input name="wishlist-uuid" value="{{.UUID}}" class="hidden">
         {{if .IsCreator}}

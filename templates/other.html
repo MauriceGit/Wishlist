@@ -53,7 +53,15 @@
                 placeholder="Enter image URL">
         </div>
 
+        <!-- Active/Inactive -->
+        <label class="inline-flex items-center me-5 cursor-pointer">
+            <input type="checkbox" id="active" name="active" value="true" class="sr-only peer" {{if .Wish.Active}}checked{{end}}>
+            <div class="relative w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
+            <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">Active</span>
+        </label>
+
         <div class="flex justify-end gap-3">
+
             <!-- OK Button -->
             <button type="submit" class="px-6 py-2 bg-lime-500 hover:bg-lime-600 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-50 shadow-md">
                 OK
@@ -75,12 +83,12 @@
 {{end}}
 
 {{define "wish-item"}}
-<div hx-target="this" hx-swap="outerHTML" class="break-all relative z-0 p-4 shadow-md rounded-lg flex justify-between items-start {{if and .Wish.Reserved (not .IsCreator)}} bg-gray-200 cursor-not-allowed {{else}} bg-white {{end}}">
+<div hx-target="this" hx-swap="outerHTML" class="break-all relative z-0 p-4 shadow-md rounded-lg flex justify-between items-start {{if or (and (not .Wish.Active) .IsCreator) (and .Wish.Reserved (not .IsCreator))}} bg-gray-200 cursor-not-allowed {{else}} bg-white {{end}}">
 
     {{if .Wish.ImageUrl}} <img src="{{.Wish.ImageUrl}}" alt="Icon" class="w-8 h-8 mr-4 rounded-lg"> {{end}}
 
     <!-- Add a click event listener with plain JS to toggle the hidden class -->
-    <div onclick="toggleDetails(this)" class="flex flex-col items-start {{if and .Wish.Reserved (not .IsCreator)}} opacity-50 {{end}} flex-grow pr-5 pl-2">
+    <div onclick="toggleDetails(this)" class="flex flex-col items-start {{if or (and (not .Wish.Active) .IsCreator) (and .Wish.Reserved (not .IsCreator))}} opacity-50 {{end}} flex-grow pr-5 pl-2">
         <div class="whitespace-normal font-bold">
             {{.Wish.Name}}
         </div>
@@ -138,6 +146,16 @@
             <button>
                 <svg class="w-6 h-6 text-gray-800 dark:text-white fill-lime-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                   <path fill-rule="evenodd" d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm13.707-1.293a1 1 0 0 0-1.414-1.414L11 12.586l-1.793-1.793a1 1 0 0 0-1.414 1.414l2.5 2.5a1 1 0 0 0 1.414 0l4-4Z" clip-rule="evenodd"/>
+                </svg>
+            </button>
+        </div>
+    {{end}}
+    <!-- Pink/Red icon on the top left that the wish is inactive! -->
+    {{if and (not .Wish.Active) .IsCreator}}
+        <div class="absolute inset-y-0 left-0 z-10">
+            <button>
+                <svg class="w-6 h-6 text-gray-800 dark:text-white fill-pink-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                  <path stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.757 12h8.486M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
                 </svg>
             </button>
         </div>

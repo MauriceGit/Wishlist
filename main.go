@@ -57,6 +57,7 @@ type Wish struct {
 	Links    map[int64]string
 	ImageUrl string
 	Reserved bool
+	Active   bool
 }
 
 type Wishlist struct {
@@ -245,15 +246,15 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 	if wish.Reserved {
 		dbReserved = 1
 	}
-
-	if wish.Links == nil {
-		wish.Links = make(map[int64]string)
+	dbActive := int64(0)
+	if wish.Active {
+		dbActive = 1
 	}
 
 	// Insert with into db if it is a new wish
 	if wishId == -1 {
 		dbWish, err := dbQueries.CreateWish(ctx, sqlc.CreateWishParams{
-			uuid, wish.Name, wish.Description, wish.ImageUrl, dbReserved,
+			uuid, wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive,
 		})
 		if err != nil {
 			fmt.Printf("Creating new wish in db failed: %v\n", err)
@@ -262,7 +263,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 		wishId = dbWish.ID
 	} else {
 		if err := dbQueries.UpdateWish(ctx, sqlc.UpdateWishParams{
-			wish.Name, wish.Description, wish.ImageUrl, dbReserved, wishId,
+			wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wishId,
 		}); err != nil {
 			fmt.Printf("Updating wish in db failed: %v\n", err)
 			return -1, err
@@ -939,7 +940,7 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 
 		data := TemplateWish{
 			ID:   -1, // An invalid index so that we generate a new item after the OK-button
-			Wish: Wish{"", "", nil, "", false},
+			Wish: Wish{"", "", nil, "", false, true},
 		}
 
 		if r.Header.Get("HX-Request") == "true" {
@@ -984,6 +985,7 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			Links:       make(map[int64]string),
 			ImageUrl:    r.FormValue("imageUrl"),
 			Reserved:    reserved,
+			Active:      r.FormValue("active") != "",
 		}
 
 		wishId, err := addWish(uuid, tmpWish, id, r.Form["link"])
@@ -1052,6 +1054,7 @@ func loadUserDataFromDB(username string) (userdata, error) {
 			wish.ImageUrl = w.ImageUrl
 			wish.Name = w.Name
 			wish.Reserved = w.Reserved != 0
+			wish.Active = w.Active != 0
 
 			dbLinks, err := dbQueries.GetLinks(ctx, w.ID)
 			if err != nil {
