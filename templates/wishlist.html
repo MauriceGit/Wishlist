@@ -116,10 +116,15 @@
         </div>
     {{end}}
 </div>
-{{if .IsCreator}}
+{{if and .IsCreator (ne .Access 0)}}
     <script>
         // Automatically fill the input field with the current URL
-        document.getElementById("wishlist-url").value = window.location.href + {{.UUID}};
+        let currentUrl = window.location.href;
+        // Check if the current URL already ends with the UUID
+        if (!currentUrl.endsWith("{{.UUID}}")) {
+            currentUrl += "{{.UUID}}";
+        }
+        document.getElementById("wishlist-url").value = currentUrl;
 
         // Add event listener to copy the URL to the clipboard
         document.getElementById("copy-button").addEventListener("click", function() {
