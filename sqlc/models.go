@@ -34,4 +34,5 @@ type Wishlist struct {
 	UserName  string
 	Title     string
 	Timestamp sql.NullTime
+	Access    int64
 }

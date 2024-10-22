@@ -27,9 +27,9 @@ DELETE FROM users;
 
 -- name: CreateWishlist :exec
 INSERT INTO wishlists (
-    uuid, user_name, title
+    uuid, user_name, title, access
 ) VALUES (
-    ?, ?, ?
+    ?, ?, ?, ?
 );
 
 -- name: GetWishlist :one
@@ -43,7 +43,8 @@ ORDER BY timestamp;
 
 -- name: UpdateWishlist :exec
 UPDATE wishlists
-SET title = ?
+SET title = ?,
+    access = ?
 WHERE uuid = ?;
 
 -- name: DeleteWishlist :exec

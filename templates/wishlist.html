@@ -28,6 +28,31 @@
                 placeholder="Enter Wishlist Name">
         </div>
 
+        <div class="border border-gray-200 rounded-lg p-4">
+            <h3 class="mb-2">Zugriff</h3>
+            <div class="flex items-center mb-2">
+                <input {{if eq .Access 0}}checked{{end}} id="access-1" type="radio" value="secret" name="access" class="w-4 h-4 text-pink-700 bg-gray-100 border-gray-300">
+                <label for="access-1" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">
+                    <span class="font-semibold text-gray-800">Geheim</span>
+                    <span class="ml-3 text-gray-500/75">(Nur du kannst Wünsche reservieren und die Wunschliste einsehen)</span>
+                </label>
+            </div>
+            <div class="flex items-center mb-2">
+                <input {{if eq .Access 1}}checked{{end}} id="access-2" type="radio" value="public" name="access" class="w-4 h-4 text-pink-700 bg-gray-100 border-gray-300">
+                <label for="access-2" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">
+                    <span class="font-semibold text-gray-800">Öffentlich</span>
+                    <span class="ml-3 text-gray-500/75">(Nur andere können Wünsche reservieren. Du kannst Reservierungen nicht sehen!)</span>
+                </label>
+            </div>
+            <div class="flex items-center">
+                <input {{if eq .Access 2}}checked{{end}} id="access-3" type="radio" value="shared" name="access" class="w-4 h-4 text-pink-700 bg-gray-100 border-gray-300">
+                <label for="access-3" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">
+                    <span class="font-semibold text-gray-800">Gemeinsam</span>
+                    <span class="ml-3 text-gray-500/75">(Du und andere können Wünsche reservieren und einsehen)</span>
+                </label>
+            </div>
+        </div>
+
         <div class="flex justify-end gap-3">
             <!-- OK Button -->
             <button type="submit" class="px-6 py-2 bg-lime-500 hover:bg-lime-600 text-gray-700 rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-50 shadow-md">
@@ -60,9 +85,10 @@
 
     <div class="grid grid-cols-1 gap-4">
         {{$iscreator := .IsCreator}}
+        {{$access := .Access}}
         {{range $id, $wish := .Wishes}}
             {{if or $iscreator .Active}}
-                {{template "wish-item" (.BundleID $id $iscreator)}}
+                {{template "wish-item" (.BundleID $id $iscreator $access)}}
             {{end}}
         {{end}}
         <input name="wishlist-uuid" value="{{.UUID}}" class="hidden">

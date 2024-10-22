@@ -26,6 +26,14 @@ import (
 
 // ======================== Used to communicate with html/template
 
+type AccessState int
+
+const (
+	AccessSecret AccessState = iota
+	AccessPublic
+	AccessShared
+)
+
 type Button struct {
 	Link           string
 	Color          string
@@ -39,6 +47,7 @@ type TemplateWish struct {
 	Wish      Wish
 	IsCreator bool
 	Creator   string
+	Access    AccessState
 }
 
 // ======================== Session Data
@@ -63,6 +72,7 @@ type Wish struct {
 type Wishlist struct {
 	Title  string
 	UUID   string
+	Access AccessState
 	Wishes map[int64]Wish
 }
 
@@ -111,8 +121,8 @@ func newButton(link, color, colorHighlight, side string) Button {
 }
 
 // This function will be used in the html/template to provide both wish and current index to the sub-template!
-func (wish Wish) BundleID(id int64, isCreator bool) TemplateWish {
-	return TemplateWish{id, wish, isCreator, ""}
+func (wish Wish) BundleID(id int64, isCreator bool, access AccessState) TemplateWish {
+	return TemplateWish{id, wish, isCreator, "", access}
 }
 
 func parseId(id string) int64 {
@@ -193,11 +203,12 @@ func createNewWishlist(user string) error {
 	var wishlist Wishlist
 	wishlist.UUID = uuid
 	wishlist.Title = fmt.Sprintf("Wishlist %v", len(users[user].Wishlists))
+	wishlist.Access = AccessPublic
 	wishlist.Wishes = make(map[int64]Wish)
 	users[user].Wishlists[uuid] = wishlist
 	shortcuts[uuid] = user
 
-	if err := dbQueries.CreateWishlist(ctx, sqlc.CreateWishlistParams{uuid, user, wishlist.Title}); err != nil {
+	if err := dbQueries.CreateWishlist(ctx, sqlc.CreateWishlistParams{uuid, user, wishlist.Title, int64(wishlist.Access)}); err != nil {
 		fmt.Printf("Creating DB wishlist failed: %v\n", err)
 		return err
 	}
@@ -205,14 +216,15 @@ func createNewWishlist(user string) error {
 	return nil
 }
 
-func setWishlistTitle(user, uuid, title string) {
+func updateWishlist(user, uuid, title string, access AccessState) {
 	mu.Lock()
 	defer mu.Unlock()
 	tmpWishlist := users[user].Wishlists[uuid]
 	tmpWishlist.Title = title
+	tmpWishlist.Access = access
 	users[user].Wishlists[uuid] = tmpWishlist
 
-	if err := dbQueries.UpdateWishlist(ctx, sqlc.UpdateWishlistParams{title, uuid}); err != nil {
+	if err := dbQueries.UpdateWishlist(ctx, sqlc.UpdateWishlistParams{title, int64(access), uuid}); err != nil {
 		fmt.Printf("Wishlist title update for db failed: %v\n", err)
 	}
 }
@@ -368,29 +380,35 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 		wlUser := shortcuts[uuid]
 		wishlist := users[wlUser].Wishlists[uuid]
 
-		data := struct {
-			Title string
-			UUID  string
-			//Wishes        []Wish
-			Wishes        map[int64]Wish
-			Authenticated bool
-			Username      string
-			IsCreator     bool
-			Creator       string
-		}{
-			Title:         wishlist.Title,
-			UUID:          wishlist.UUID,
-			Wishes:        wishlist.Wishes,
-			Authenticated: authenticated,
-			Username:      user,
-			IsCreator:     user == wlUser,
-			Creator:       wlUser,
-		}
+		// Wishlists set to 'Secret' can not be accessed externally!
+		if wishlist.Access != AccessSecret || user == wlUser {
 
-		if err := tmplFullWishlist.ExecuteTemplate(w, "all", data); err != nil {
-			fmt.Println(err)
+			data := struct {
+				Title string
+				UUID  string
+				//Wishes        []Wish
+				Wishes        map[int64]Wish
+				Authenticated bool
+				Username      string
+				IsCreator     bool
+				Creator       string
+				Access        AccessState
+			}{
+				Title:         wishlist.Title,
+				UUID:          wishlist.UUID,
+				Wishes:        wishlist.Wishes,
+				Authenticated: authenticated,
+				Username:      user,
+				IsCreator:     user == wlUser,
+				Creator:       wlUser,
+				Access:        wishlist.Access,
+			}
+
+			if err := tmplFullWishlist.ExecuteTemplate(w, "all", data); err != nil {
+				fmt.Println(err)
+			}
+			return
 		}
-		return
 	}
 
 	data := struct {
@@ -461,12 +479,14 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 		data := struct {
 			Title     string
 			UUID      string
+			Access    AccessState
 			Wishes    map[int64]Wish
 			IsCreator bool
 			Creator   string
 		}{
 			Title:     wishlist.Title,
 			UUID:      wishlist.UUID,
+			Access:    wishlist.Access,
 			Wishes:    wishlist.Wishes,
 			IsCreator: user == wlUser,
 			Creator:   wlUser,
@@ -553,13 +573,25 @@ func editwishlistDoneHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fmt.Printf("Wishlist UUID '%v' edited by user %v\n", uuid, user)
+		access := AccessPublic
+		switch r.FormValue("access") {
+		case "secret":
+			access = AccessSecret
+		case "public":
+			access = AccessPublic
+		case "shared":
+			access = AccessShared
+		}
 
 		if r.Header.Get("HX-Request") == "true" {
-			setWishlistTitle(user, uuid, r.FormValue("name"))
-			renderWishlistTitle(w, users[user].Wishlists[uuid], true)
-			return
+			updateWishlist(user, uuid, r.FormValue("name"), access)
+			//renderWishlistTitle(w, users[user].Wishlists[uuid], true)
+			//return
 		}
-		http.Redirect(w, r, "/wishlisttitle/"+uuid, http.StatusOK)
+		//http.Redirect(w, r, "/wishlisttitle/"+uuid, http.StatusOK)
+
+		w.Header().Set("HX-Redirect", "/"+uuid)
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -782,7 +814,7 @@ func newuserHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 }
-func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, id int64, wish Wish, isCreator bool, creator string) {
+func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, id int64, wish Wish, isCreator bool, creator string, access AccessState) {
 
 	if r.Header.Get("HX-Request") == "true" {
 		if err := tmplOther.ExecuteTemplate(w, template, TemplateWish{
@@ -790,6 +822,7 @@ func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, 
 			Wish:      wish,
 			IsCreator: isCreator,
 			Creator:   creator,
+			Access:    access,
 		}); err != nil {
 			fmt.Println(err)
 		}
@@ -830,8 +863,8 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("User '%v' %v wish (id: %v) in wishlist with uuid: %v by creator '%v'\n", user, reserveStr, id, uuid, wlUser)
 
 		reserveWish(uuid, id, dbReserve)
-
-		writeTemplateWish(w, r, "wish-item", id, users[wlUser].Wishlists[uuid].Wishes[id], user == wlUser, wlUser)
+		wl := users[wlUser].Wishlists[uuid]
+		writeTemplateWish(w, r, "wish-item", id, wl.Wishes[id], user == wlUser, wlUser, wl.Access)
 	}
 }
 
@@ -886,7 +919,8 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Printf("Show item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
-		writeTemplateWish(w, r, "wish-item", id, users[user].Wishlists[uuid].Wishes[id], true, shortcuts[uuid])
+		wl := users[user].Wishlists[uuid]
+		writeTemplateWish(w, r, "wish-item", id, wl.Wishes[id], true, shortcuts[uuid], wl.Access)
 	}
 }
 
@@ -1010,7 +1044,8 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		writeTemplateWish(w, r, "wish-item", wishId, users[user].Wishlists[uuid].Wishes[wishId], true, shortcuts[uuid])
+		wl := users[user].Wishlists[uuid]
+		writeTemplateWish(w, r, "wish-item", wishId, wl.Wishes[wishId], true, shortcuts[uuid], wl.Access)
 	}
 }
 
@@ -1055,6 +1090,7 @@ func loadUserDataFromDB(username string) (userdata, error) {
 		var wishlist Wishlist
 		wishlist.Title = wl.Title
 		wishlist.UUID = wl.Uuid
+		wishlist.Access = AccessState(wl.Access)
 		wishlist.Wishes = make(map[int64]Wish)
 
 		dbWishes, err := dbQueries.GetWishes(ctx, wl.Uuid)

@@ -91,9 +91,9 @@ func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, e
 
 const createWishlist = `-- name: CreateWishlist :exec
 INSERT INTO wishlists (
-    uuid, user_name, title
+    uuid, user_name, title, access
 ) VALUES (
-    ?, ?, ?
+    ?, ?, ?, ?
 )
 `
 
@@ -101,10 +101,16 @@ type CreateWishlistParams struct {
 	Uuid     string
 	UserName string
 	Title    string
+	Access   int64
 }
 
 func (q *Queries) CreateWishlist(ctx context.Context, arg CreateWishlistParams) error {
-	_, err := q.db.ExecContext(ctx, createWishlist, arg.Uuid, arg.UserName, arg.Title)
+	_, err := q.db.ExecContext(ctx, createWishlist,
+		arg.Uuid,
+		arg.UserName,
+		arg.Title,
+		arg.Access,
+	)
 	return err
 }
 
@@ -344,7 +350,7 @@ func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, e
 }
 
 const getWishlist = `-- name: GetWishlist :one
-SELECT uuid, user_name, title, timestamp FROM wishlists
+SELECT uuid, user_name, title, timestamp, access FROM wishlists
 WHERE uuid = ? LIMIT 1
 `
 
@@ -356,12 +362,13 @@ func (q *Queries) GetWishlist(ctx context.Context, uuid string) (Wishlist, error
 		&i.UserName,
 		&i.Title,
 		&i.Timestamp,
+		&i.Access,
 	)
 	return i, err
 }
 
 const getWishlists = `-- name: GetWishlists :many
-SELECT uuid, user_name, title, timestamp FROM wishlists
+SELECT uuid, user_name, title, timestamp, access FROM wishlists
 WHERE user_name = ?
 ORDER BY timestamp
 `
@@ -380,6 +387,7 @@ func (q *Queries) GetWishlists(ctx context.Context, userName string) ([]Wishlist
 			&i.UserName,
 			&i.Title,
 			&i.Timestamp,
+			&i.Access,
 		); err != nil {
 			return nil, err
 		}
@@ -476,16 +484,18 @@ func (q *Queries) UpdateWish(ctx context.Context, arg UpdateWishParams) error {
 
 const updateWishlist = `-- name: UpdateWishlist :exec
 UPDATE wishlists
-SET title = ?
+SET title = ?,
+    access = ?
 WHERE uuid = ?
 `
 
 type UpdateWishlistParams struct {
-	Title string
-	Uuid  string
+	Title  string
+	Access int64
+	Uuid   string
 }
 
 func (q *Queries) UpdateWishlist(ctx context.Context, arg UpdateWishlistParams) error {
-	_, err := q.db.ExecContext(ctx, updateWishlist, arg.Title, arg.Uuid)
+	_, err := q.db.ExecContext(ctx, updateWishlist, arg.Title, arg.Access, arg.Uuid)
 	return err
 }
