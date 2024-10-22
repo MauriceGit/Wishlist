@@ -96,7 +96,7 @@
             {{template "plus-button" (newButton "/new" "bg-blue-400" "bg-blue-500" "end")}}
         {{end}}
     </div>
-    {{if .IsCreator}}
+    {{if and .IsCreator (ne .Access 0)}}
         <div class="max-w-lg mx-auto bg-white shadow-md rounded-lg p-6 mt-6">
             <!-- Description -->
             <h2 class="text-xl font-semibold text-gray-800 mb-4">Zum Teilen für Freunde und Familie</h2>
