@@ -43,7 +43,6 @@ type Button struct {
 }
 
 type TemplateWish struct {
-	ID        int64
 	Wish      Wish
 	IsCreator bool
 	Creator   string
@@ -60,6 +59,7 @@ type session struct {
 // ======================== Internal Wishlist data structures
 
 type Wish struct {
+	ID          int64
 	Name        string
 	Description string
 	//Links       []string
@@ -121,8 +121,8 @@ func newButton(link, color, colorHighlight, side string) Button {
 }
 
 // This function will be used in the html/template to provide both wish and current index to the sub-template!
-func (wish Wish) BundleID(id int64, isCreator bool, access AccessState) TemplateWish {
-	return TemplateWish{id, wish, isCreator, "", access}
+func (wish Wish) BundleWish(isCreator bool, access AccessState) TemplateWish {
+	return TemplateWish{wish, isCreator, "", access}
 }
 
 func parseId(id string) int64 {
@@ -814,11 +814,10 @@ func newuserHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 }
-func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, id int64, wish Wish, isCreator bool, creator string, access AccessState) {
+func writeTemplateWish(w http.ResponseWriter, r *http.Request, template string, wish Wish, isCreator bool, creator string, access AccessState) {
 
 	if r.Header.Get("HX-Request") == "true" {
 		if err := tmplOther.ExecuteTemplate(w, template, TemplateWish{
-			ID:        id,
 			Wish:      wish,
 			IsCreator: isCreator,
 			Creator:   creator,
@@ -864,7 +863,7 @@ func reserveWishHandler(w http.ResponseWriter, r *http.Request) {
 
 		reserveWish(uuid, id, dbReserve)
 		wl := users[wlUser].Wishlists[uuid]
-		writeTemplateWish(w, r, "wish-item", id, wl.Wishes[id], user == wlUser, wlUser, wl.Access)
+		writeTemplateWish(w, r, "wish-item", wl.Wishes[id], user == wlUser, wlUser, wl.Access)
 	}
 }
 
@@ -920,7 +919,7 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Show item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
 		wl := users[user].Wishlists[uuid]
-		writeTemplateWish(w, r, "wish-item", id, wl.Wishes[id], true, shortcuts[uuid], wl.Access)
+		writeTemplateWish(w, r, "wish-item", wl.Wishes[id], true, shortcuts[uuid], wl.Access)
 	}
 }
 
@@ -945,10 +944,7 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Show the edit of item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := tmplOther.ExecuteTemplate(w, "wish-edit", TemplateWish{
-				ID:   id,
-				Wish: users[user].Wishlists[uuid].Wishes[id],
-			}); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "wish-edit", users[user].Wishlists[uuid].Wishes[id]); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -988,13 +984,8 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
-		data := TemplateWish{
-			ID:   -1, // An invalid index so that we generate a new item after the OK-button
-			Wish: Wish{"", "", nil, "", false, true},
-		}
-
 		if r.Header.Get("HX-Request") == "true" {
-			if err := tmplOther.ExecuteTemplate(w, "wish-edit", data); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "wish-edit", Wish{-1, "", "", nil, "", false, true}); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -1030,6 +1021,7 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		tmpWish := Wish{
+			ID:          id,
 			Name:        r.FormValue("name"),
 			Description: r.FormValue("description"),
 			Links:       make(map[int64]string),
@@ -1045,7 +1037,18 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		wl := users[user].Wishlists[uuid]
-		writeTemplateWish(w, r, "wish-item", wishId, wl.Wishes[wishId], true, shortcuts[uuid], wl.Access)
+		writeTemplateWish(w, r, "wish-item", wl.Wishes[wishId], true, shortcuts[uuid], wl.Access)
+	}
+}
+
+func sortedHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Unable to parse form", http.StatusBadRequest)
+		return
+	}
+
+	for k, v := range r.Form {
+		fmt.Printf("%v: %v\n", k, v)
 	}
 }
 
@@ -1101,6 +1104,7 @@ func loadUserDataFromDB(username string) (userdata, error) {
 
 		for _, w := range dbWishes {
 			var wish Wish
+			wish.ID = w.ID
 			wish.Links = make(map[int64]string)
 			wish.Description = w.Description
 			wish.ImageUrl = w.ImageUrl
@@ -1219,6 +1223,8 @@ func main() {
 	http.HandleFunc("/changepassword", changepasswordHandler)
 	// Create new user. This is shown to limited users
 	http.HandleFunc("/newuser", newuserHandler)
+
+	http.HandleFunc("/sorted", sortedHandler)
 
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./favicon.ico")
