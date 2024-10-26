@@ -271,7 +271,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 	// Insert with into db if it is a new wish
 	if wishId == -1 {
 		dbWish, err := dbQueries.CreateWish(ctx, sqlc.CreateWishParams{
-			uuid, wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive,
+			uuid, wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wish.OrderIndex,
 		})
 		if err != nil {
 			fmt.Printf("Creating new wish in db failed: %v\n", err)
@@ -280,7 +280,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 		wishId = dbWish.ID
 	} else {
 		if err := dbQueries.UpdateWish(ctx, sqlc.UpdateWishParams{
-			wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wishId,
+			wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wishId, wish.OrderIndex,
 		}); err != nil {
 			fmt.Printf("Updating wish in db failed: %v\n", err)
 			return -1, err
@@ -338,6 +338,8 @@ func loadUserFromDB(user string) bool {
 }
 
 func updatePassword(user, password string) {
+	mu.Lock()
+	defer mu.Unlock()
 	tmpUserdata := users[user]
 	tmpUserdata.passwordHash = hashPassword(user, password)
 	users[user] = tmpUserdata
@@ -348,6 +350,8 @@ func updatePassword(user, password string) {
 }
 
 func createNewUser(user, password string) {
+	mu.Lock()
+	defer mu.Unlock()
 	users[user] = userdata{
 		passwordHash: hashPassword(user, password),
 		Wishlists:    make(map[string]Wishlist),
@@ -355,6 +359,22 @@ func createNewUser(user, password string) {
 	if err := dbQueries.CreateUser(ctx, sqlc.CreateUserParams{user, users[user].passwordHash}); err != nil {
 		fmt.Printf("Error creating new user in db: %v\n", err)
 	}
+}
+
+func assignNewOrderIndices(user, uuid string, ids []string) {
+	mu.Lock()
+	defer mu.Unlock()
+	wl := users[user].Wishlists[uuid]
+	for i, idStr := range ids {
+		id := parseId(idStr)
+		w := wl.Wishes[id]
+		w.OrderIndex = int64(i)
+		wl.Wishes[id] = w
+		if err := dbQueries.SetWishOrderIndex(ctx, sqlc.SetWishOrderIndexParams{int64(i), id}); err != nil {
+			fmt.Printf("Error updating order_index in db: %v\n", err)
+		}
+	}
+	users[user].Wishlists[uuid] = wl
 }
 
 // =====================================================================================================================
@@ -1066,14 +1086,7 @@ func sortedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Printf("Re-Ordering wishes by user %v in wishlist with uuid: '%v'\n", user, uuid)
 
-		wl := users[user].Wishlists[uuid]
-		for i, idStr := range r.Form["item"] {
-			id := parseId(idStr)
-			w := wl.Wishes[id]
-			w.OrderIndex = int64(i)
-			wl.Wishes[id] = w
-		}
-		users[user].Wishlists[uuid] = wl
+		assignNewOrderIndices(user, uuid, r.Form["item"])
 	}
 }
 
@@ -1136,6 +1149,7 @@ func loadUserDataFromDB(username string) (userdata, error) {
 			wish.Name = w.Name
 			wish.Reserved = w.Reserved != 0
 			wish.Active = w.Active != 0
+			wish.OrderIndex = w.OrderIndex
 
 			dbLinks, err := dbQueries.GetLinks(ctx, w.ID)
 			if err != nil {

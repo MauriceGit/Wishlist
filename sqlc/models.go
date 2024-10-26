@@ -27,6 +27,7 @@ type Wish struct {
 	ImageUrl     string
 	Reserved     int64
 	Active       int64
+	OrderIndex   int64
 }
 
 type Wishlist struct {
