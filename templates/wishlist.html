@@ -74,6 +74,35 @@
 {{end}}
 
 {{define "content"}}
+<script>
+    htmx.onLoad(function(content) {
+        var sortables = content.querySelectorAll(".sortable");
+        for (var i = 0; i < sortables.length; i++) {
+          var sortable = sortables[i];
+          var sortableInstance = new Sortable(sortable, {
+              handle: '.sorthandle',
+              animation: 150,
+              ghostClass: 'blue-background-class',
+
+              // Make the `.htmx-indicator` unsortable
+              filter: ".htmx-indicator",
+              onMove: function (evt) {
+                return evt.related.className.indexOf('htmx-indicator') === -1;
+              },
+
+              // Disable sorting on the `end` event
+              onEnd: function (evt) {
+                this.option("disabled", true);
+              }
+          });
+
+          // Re-enable sorting on the `htmx:afterSwap` event
+          sortable.addEventListener("htmx:afterSwap", function() {
+            sortableInstance.option("disabled", false);
+          });
+        }
+    })
+</script>
 <div class="container mx-auto p-4">
     {{if not .IsCreator}}
         <h2 class="text-xl mb-4 py-2">(Ersteller der Wunschliste: {{.Creator}})</h2>
@@ -83,12 +112,13 @@
         {{template "wishlist-title" .}}
     </div>
 
-    <div class="grid grid-cols-1 gap-4">
+    <form hx-post="/sorted" hx-trigger="end" hx-swap="none" class="sortable grid grid-cols-1 gap-4">
+        <div class="htmx-indicator">Updating...</div>
         {{$iscreator := .IsCreator}}
         {{$access := .Access}}
-        {{range $id, $wish := .Wishes}}
+        {{range .Wishes}}
             {{if or $iscreator .Active}}
-                {{template "wish-item" (.BundleID $id $iscreator $access)}}
+                {{template "wish-item" (.BundleWish $iscreator $access)}}
             {{end}}
         {{end}}
         <input name="wishlist-uuid" value="{{.UUID}}" class="hidden">
@@ -116,6 +146,9 @@
         </div>
     {{end}}
 </div>
+
+
+
 {{if and .IsCreator (ne .Access 0)}}
     <script>
         // Automatically fill the input field with the current URL
