@@ -407,11 +407,13 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 		// Wishlists set to 'Secret' can not be accessed externally!
 		if wishlist.Access != AccessSecret || user == wlUser {
 
+			sortedList := slices.Collect(maps.Values(wishlist.Wishes))
+			sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
+
 			data := struct {
-				Title string
-				UUID  string
-				//Wishes        []Wish
-				Wishes        map[int64]Wish
+				Title         string
+				UUID          string
+				Wishes        []Wish
 				Authenticated bool
 				Username      string
 				IsCreator     bool
@@ -420,7 +422,7 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 			}{
 				Title:         wishlist.Title,
 				UUID:          wishlist.UUID,
-				Wishes:        wishlist.Wishes,
+				Wishes:        sortedList,
 				Authenticated: authenticated,
 				Username:      user,
 				IsCreator:     user == wlUser,
