@@ -51,11 +51,11 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 
 const createWish = `-- name: CreateWish :one
 INSERT INTO wishes(
-    wishlist_uuid, name, description, image_url, reserved, active
+    wishlist_uuid, name, description, image_url, reserved, active, order_index
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?
 )
-RETURNING id, wishlist_uuid, name, description, image_url, reserved, active
+RETURNING id, wishlist_uuid, name, description, image_url, reserved, active, order_index
 `
 
 type CreateWishParams struct {
@@ -65,6 +65,7 @@ type CreateWishParams struct {
 	ImageUrl     string
 	Reserved     int64
 	Active       int64
+	OrderIndex   int64
 }
 
 func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, error) {
@@ -75,6 +76,7 @@ func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, e
 		arg.ImageUrl,
 		arg.Reserved,
 		arg.Active,
+		arg.OrderIndex,
 	)
 	var i Wish
 	err := row.Scan(
@@ -85,6 +87,7 @@ func (q *Queries) CreateWish(ctx context.Context, arg CreateWishParams) (Wish, e
 		&i.ImageUrl,
 		&i.Reserved,
 		&i.Active,
+		&i.OrderIndex,
 	)
 	return i, err
 }
@@ -293,7 +296,7 @@ func (q *Queries) GetUsers(ctx context.Context) ([]User, error) {
 }
 
 const getWish = `-- name: GetWish :one
-SELECT id, wishlist_uuid, name, description, image_url, reserved, active FROM wishes
+SELECT id, wishlist_uuid, name, description, image_url, reserved, active, order_index FROM wishes
 WHERE id = ? LIMIT 1
 `
 
@@ -308,14 +311,15 @@ func (q *Queries) GetWish(ctx context.Context, id int64) (Wish, error) {
 		&i.ImageUrl,
 		&i.Reserved,
 		&i.Active,
+		&i.OrderIndex,
 	)
 	return i, err
 }
 
 const getWishes = `-- name: GetWishes :many
-SELECT id, wishlist_uuid, name, description, image_url, reserved, active FROM wishes
+SELECT id, wishlist_uuid, name, description, image_url, reserved, active, order_index FROM wishes
 WHERE wishlist_uuid = ?
-ORDER BY id
+ORDER BY order_index, id
 `
 
 func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, error) {
@@ -335,6 +339,7 @@ func (q *Queries) GetWishes(ctx context.Context, wishlistUuid string) ([]Wish, e
 			&i.ImageUrl,
 			&i.Reserved,
 			&i.Active,
+			&i.OrderIndex,
 		); err != nil {
 			return nil, err
 		}
@@ -402,6 +407,22 @@ func (q *Queries) GetWishlists(ctx context.Context, userName string) ([]Wishlist
 	return items, nil
 }
 
+const setWishOrderIndex = `-- name: SetWishOrderIndex :exec
+UPDATE wishes
+SET order_index = ?
+WHERE id = ?
+`
+
+type SetWishOrderIndexParams struct {
+	OrderIndex int64
+	ID         int64
+}
+
+func (q *Queries) SetWishOrderIndex(ctx context.Context, arg SetWishOrderIndexParams) error {
+	_, err := q.db.ExecContext(ctx, setWishOrderIndex, arg.OrderIndex, arg.ID)
+	return err
+}
+
 const setWishReserve = `-- name: SetWishReserve :exec
 UPDATE wishes
 SET reserved = ?
@@ -457,7 +478,8 @@ SET name = ?,
     description = ?,
     image_url = ?,
     reserved = ?,
-    active = ?
+    active = ?,
+    order_index = ?
 WHERE id = ?
 `
 
@@ -467,6 +489,7 @@ type UpdateWishParams struct {
 	ImageUrl    string
 	Reserved    int64
 	Active      int64
+	OrderIndex  int64
 	ID          int64
 }
 
@@ -477,6 +500,7 @@ func (q *Queries) UpdateWish(ctx context.Context, arg UpdateWishParams) error {
 		arg.ImageUrl,
 		arg.Reserved,
 		arg.Active,
+		arg.OrderIndex,
 		arg.ID,
 	)
 	return err
