@@ -12,8 +12,11 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"maps"
 	"net/http"
 	"os"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,11 +65,11 @@ type Wish struct {
 	ID          int64
 	Name        string
 	Description string
-	//Links       []string
-	Links    map[int64]string
-	ImageUrl string
-	Reserved bool
-	Active   bool
+	Links       map[int64]string
+	ImageUrl    string
+	Reserved    bool
+	Active      bool
+	OrderIndex  int64
 }
 
 type Wishlist struct {
@@ -283,6 +286,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 			return -1, err
 		}
 	}
+	wish.ID = wishId
 
 	// Remove all links of this wish from the database (if there are any)
 	if err := dbQueries.DeleteWishLinks(ctx, wishId); err != nil {
@@ -476,18 +480,21 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 		wlUser := shortcuts[uuid]
 		wishlist := users[wlUser].Wishlists[uuid]
 
+		sortedList := slices.Collect(maps.Values(wishlist.Wishes))
+		sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
+
 		data := struct {
 			Title     string
 			UUID      string
 			Access    AccessState
-			Wishes    map[int64]Wish
+			Wishes    []Wish
 			IsCreator bool
 			Creator   string
 		}{
 			Title:     wishlist.Title,
 			UUID:      wishlist.UUID,
 			Access:    wishlist.Access,
-			Wishes:    wishlist.Wishes,
+			Wishes:    sortedList,
 			IsCreator: user == wlUser,
 			Creator:   wlUser,
 		}
@@ -985,7 +992,7 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 
 		if r.Header.Get("HX-Request") == "true" {
-			if err := tmplOther.ExecuteTemplate(w, "wish-edit", Wish{-1, "", "", nil, "", false, true}); err != nil {
+			if err := tmplOther.ExecuteTemplate(w, "wish-edit", Wish{-1, "", "", nil, "", false, true, 0}); err != nil {
 				fmt.Println(err)
 			}
 			return
@@ -1016,8 +1023,10 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Editing Done for item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
 		reserved := false
+		orderIndex := int64(0)
 		if id >= 0 {
 			reserved = users[user].Wishlists[uuid].Wishes[id].Reserved
+			orderIndex = int64(len(users[user].Wishlists[uuid].Wishes))
 		}
 
 		tmpWish := Wish{
@@ -1028,6 +1037,7 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 			ImageUrl:    r.FormValue("imageUrl"),
 			Reserved:    reserved,
 			Active:      r.FormValue("active") != "",
+			OrderIndex:  orderIndex,
 		}
 
 		wishId, err := addWish(uuid, tmpWish, id, r.Form["link"])
@@ -1042,13 +1052,28 @@ func editDoneHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func sortedHandler(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Unable to parse form", http.StatusBadRequest)
-		return
-	}
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPost {
 
-	for k, v := range r.Form {
-		fmt.Printf("%v: %v\n", k, v)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Unable to parse form", http.StatusBadRequest)
+			return
+		}
+
+		uuid := r.FormValue("wishlist-uuid")
+		if !checkWishlistUUID(uuid) || shortcuts[uuid] != user {
+			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
+			return
+		}
+		fmt.Printf("Re-Ordering wishes by user %v in wishlist with uuid: '%v'\n", user, uuid)
+
+		wl := users[user].Wishlists[uuid]
+		for i, idStr := range r.Form["item"] {
+			id := parseId(idStr)
+			w := wl.Wishes[id]
+			w.OrderIndex = int64(i)
+			wl.Wishes[id] = w
+		}
+		users[user].Wishlists[uuid] = wl
 	}
 }
 

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS wishes (
     image_url TEXT NOT NULL,
     reserved INTEGER NOT NULL,
     active INTEGER NOT NULL,
+    order_index INTEGER NOT NULL,
     FOREIGN KEY (wishlist_uuid) REFERENCES wishlists(uuid) ON DELETE CASCADE
 );
 

@@ -57,9 +57,9 @@ WHERE user_name = ?;
 
 -- name: CreateWish :one
 INSERT INTO wishes(
-    wishlist_uuid, name, description, image_url, reserved, active
+    wishlist_uuid, name, description, image_url, reserved, active, order_index
 ) VALUES (
-    ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?
 )
 RETURNING *;
 
@@ -70,7 +70,7 @@ WHERE id = ? LIMIT 1;
 -- name: GetWishes :many
 SELECT * FROM wishes
 WHERE wishlist_uuid = ?
-ORDER BY id;
+ORDER BY order_index, id;
 
 -- name: UpdateWish :exec
 UPDATE wishes
@@ -78,12 +78,18 @@ SET name = ?,
     description = ?,
     image_url = ?,
     reserved = ?,
-    active = ?
+    active = ?,
+    order_index = ?
 WHERE id = ?;
 
 -- name: SetWishReserve :exec
 UPDATE wishes
 SET reserved = ?
+WHERE id = ?;
+
+-- name: SetWishOrderIndex :exec
+UPDATE wishes
+SET order_index = ?
 WHERE id = ?;
 
 -- name: DeleteWish :exec
