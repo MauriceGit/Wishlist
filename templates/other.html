@@ -84,7 +84,20 @@
 
 {{define "wish-item"}}
 
-{{$showgray := or (and (not .Wish.Active) .IsCreator) (and .Wish.Reserved (or (not .IsCreator) (ne .Access 1)))}}
+{{$showgray :=
+        or
+            (and
+                (not .Wish.Active)
+                .IsCreator
+            )
+            (and
+                .Wish.Reserved
+                (or
+                    (not .IsCreator)
+                    (ne .Access 1)
+                )
+            )
+}}
 <div hx-target="this" hx-swap="outerHTML" class="break-all relative z-0 p-4 shadow-md rounded-lg flex justify-between items-start {{if $showgray}} bg-gray-200 cursor-not-allowed {{else}} bg-white {{end}}">
 
     <input type='hidden' name='item' value='{{.Wish.ID}}'/>
