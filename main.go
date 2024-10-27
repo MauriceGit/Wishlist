@@ -95,8 +95,6 @@ type userdata struct {
 }
 
 var (
-	defaultImage = "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fget.pxhere.com%2Fphoto%2Fplant-fruit-food-produce-banana-healthy-eat-single-fruits-diet-vitamins-flowering-plant-land-plant-banana-family-cooking-plantain-1386949.jpg&f=1&nofb=1&ipt=756f2c2f08e9e3d1179ece67b7cb35e273fb41c12923ddeaf5b46527e2c62c4b&ipo=images"
-
 	mu sync.Mutex
 
 	users    = map[string]userdata{}
@@ -122,6 +120,7 @@ var (
 	db        *sql.DB
 	dbQueries *sqlc.Queries
 
+	// This disables TLS, reloads templates for every request and makes cookie handling a lot more lax and insecure for local testing!
 	debugMode = runInDebugMode()
 )
 

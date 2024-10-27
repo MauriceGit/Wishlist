@@ -102,6 +102,28 @@
           });
         }
     })
+
+    {{if and .IsCreator (ne .Access 0)}}
+        // Automatically fill the input field with the current URL
+        let currentUrl = window.location.href;
+        // Check if the current URL already ends with the UUID
+        if (!currentUrl.endsWith("{{.UUID}}")) {
+            currentUrl += "{{.UUID}}";
+        }
+        document.getElementById("wishlist-url").value = currentUrl;
+
+        // Add event listener to copy the URL to the clipboard
+        document.getElementById("copy-button").addEventListener("click", function() {
+            // Select the URL field
+            var urlField = document.getElementById("wishlist-url");
+            urlField.select();
+            urlField.setSelectionRange(0, 99999); // For mobile devices
+
+            // Copy the text inside the input field
+            document.execCommand("copy");
+        });
+    {{end}}
+
 </script>
 <div class="container mx-auto p-4">
     {{if not .IsCreator}}
@@ -146,29 +168,4 @@
         </div>
     {{end}}
 </div>
-
-
-
-{{if and .IsCreator (ne .Access 0)}}
-    <script>
-        // Automatically fill the input field with the current URL
-        let currentUrl = window.location.href;
-        // Check if the current URL already ends with the UUID
-        if (!currentUrl.endsWith("{{.UUID}}")) {
-            currentUrl += "{{.UUID}}";
-        }
-        document.getElementById("wishlist-url").value = currentUrl;
-
-        // Add event listener to copy the URL to the clipboard
-        document.getElementById("copy-button").addEventListener("click", function() {
-            // Select the URL field
-            var urlField = document.getElementById("wishlist-url");
-            urlField.select();
-            urlField.setSelectionRange(0, 99999); // For mobile devices
-
-            // Copy the text inside the input field
-            document.execCommand("copy");
-        });
-    </script>
-{{end}}
 {{end}}
