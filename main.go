@@ -12,10 +12,8 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"maps"
 	"net/http"
 	"os"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +23,9 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/acme/autocert"
+
+	// Use the regular slices.Collect(maps.Values()) as soon as go version 1.23 is supported by liteIDE!
+	"golang.org/x/exp/maps"
 )
 
 // ======================== Used to communicate with html/template
@@ -112,8 +113,30 @@ var (
 	db        *sql.DB
 	dbQueries *sqlc.Queries
 
-	httpsOnly = true
+	debugMode = runInDebugMode()
 )
+
+// runInDebugMode checks, if the program is currently executed on a raspberry pi. If so, then it will force
+// HTTPS and use the cached letsencrypt certificate.
+// If not, we expect a debug build on the PC and use http and port 8080 for testing reasons.
+func runInDebugMode() bool {
+	file, err := os.Open("/proc/cpuinfo")
+	if err != nil {
+		fmt.Printf("RPI-Check: Opening /proc/cpuinfo failed: %v\n", err)
+		return true
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		s := scanner.Text()
+		if strings.HasPrefix(s, "Serial") {
+			subS := strings.Split(s, ":")
+			return strings.TrimSpace(subS[len(subS)-1]) == ""
+		}
+	}
+	return true
+}
 
 func (s *session) isExpired() bool {
 	return s.expire.Before(time.Now())
@@ -188,6 +211,7 @@ func handleUserAuthentication(w http.ResponseWriter, r *http.Request) (string, b
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(statusCode)
 	}
+
 	return user, ok
 }
 
@@ -226,7 +250,6 @@ func updateWishlist(user, uuid, title string, access AccessState) {
 	tmpWishlist.Title = title
 	tmpWishlist.Access = access
 	users[user].Wishlists[uuid] = tmpWishlist
-
 	if err := dbQueries.UpdateWishlist(ctx, sqlc.UpdateWishlistParams{title, int64(access), uuid}); err != nil {
 		fmt.Printf("Wishlist title update for db failed: %v\n", err)
 	}
@@ -280,7 +303,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 		wishId = dbWish.ID
 	} else {
 		if err := dbQueries.UpdateWish(ctx, sqlc.UpdateWishParams{
-			wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wishId, wish.OrderIndex,
+			wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wish.OrderIndex, wishId,
 		}); err != nil {
 			fmt.Printf("Updating wish in db failed: %v\n", err)
 			return -1, err
@@ -407,7 +430,7 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 		// Wishlists set to 'Secret' can not be accessed externally!
 		if wishlist.Access != AccessSecret || user == wlUser {
 
-			sortedList := slices.Collect(maps.Values(wishlist.Wishes))
+			sortedList := maps.Values(wishlist.Wishes)
 			sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
 
 			data := struct {
@@ -502,7 +525,7 @@ func wishlistHandler(w http.ResponseWriter, r *http.Request) {
 		wlUser := shortcuts[uuid]
 		wishlist := users[wlUser].Wishlists[uuid]
 
-		sortedList := slices.Collect(maps.Values(wishlist.Wishes))
+		sortedList := maps.Values(wishlist.Wishes)
 		sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
 
 		data := struct {
@@ -703,7 +726,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		sameSite := http.SameSiteStrictMode
 		secure := true
-		if !httpsOnly {
+		if debugMode {
 			sameSite = http.SameSiteLaxMode
 			secure = false
 		}
@@ -747,7 +770,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 
 		sameSite := http.SameSiteStrictMode
 		secure := true
-		if !httpsOnly {
+		if debugMode {
 			sameSite = http.SameSiteLaxMode
 			secure = false
 		}
@@ -1172,35 +1195,11 @@ func loadUserDataFromDB(username string) (userdata, error) {
 	return newUser, nil
 }
 
-// runsOnRPI checks, if the program is currently executed on a raspberry pi. If so, then it will force
-// HTTPS and use the cached letsencrypt certificate.
-// If not, we expect a debug build on the PC and use http and port 8080 for testing reasons.
-func runsOnRPI() bool {
-	file, err := os.Open("/proc/cpuinfo")
-	if err != nil {
-		fmt.Printf("RPI-Check: Opening /proc/cpuinfo failed: %v\n", err)
-		return false
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		s := scanner.Text()
-		if strings.HasPrefix(s, "Serial") {
-			subS := strings.Split(s, ":")
-			return strings.TrimSpace(subS[len(subS)-1]) != ""
-		}
-	}
-	return false
-}
-
 func main() {
-
-	httpsOnly = runsOnRPI()
 
 	var certManager autocert.Manager
 	var server *http.Server
-	if httpsOnly {
+	if !debugMode {
 		certManager = autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
@@ -1211,6 +1210,7 @@ func main() {
 			Addr: ":https",
 			TLSConfig: &tls.Config{
 				GetCertificate: certManager.GetCertificate,
+				MinVersion:     tls.VersionTLS13,
 			},
 		}
 	}
@@ -1271,7 +1271,7 @@ func main() {
 		http.ServeFile(w, r, "./favicon.ico")
 	})
 
-	if httpsOnly {
+	if !debugMode {
 		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
 		log.Fatal(server.ListenAndServeTLS("", ""))
 	} else {
