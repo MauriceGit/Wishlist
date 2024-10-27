@@ -28,8 +28,6 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-// ======================== Used to communicate with html/template
-
 type AccessState int
 
 const (
@@ -46,6 +44,8 @@ const (
 	TmplFullWishlist
 	TmplOther
 )
+
+// ======================== Used to communicate with html/template
 
 type Button struct {
 	Link           string
@@ -105,14 +105,12 @@ var (
 
 	funcMap = template.FuncMap{"newButton": newButton}
 
-	tmplFullLandingpage = template.Must(template.ParseFiles("templates/main.html", "templates/landing-page.html"))
-	tmplFullOverview    = template.Must(template.New("overview").Funcs(funcMap).ParseFiles("templates/main.html", "templates/overview.html", "templates/other.html"))
-	tmplFullWishlist    = template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
-		"templates/main.html", "templates/wishlist.html", "templates/other.html",
-	))
-	tmplOther = template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
-		"templates/other.html",
-	))
+	allTemplates = map[TemplateType]*template.Template{
+		TmplFullLandingpage: template.Must(template.ParseFiles("templates/main.html", "templates/landing-page.html")),
+		TmplFullOverview:    template.Must(template.New("overview").Funcs(funcMap).ParseFiles("templates/main.html", "templates/overview.html", "templates/other.html")),
+		TmplFullWishlist:    template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/main.html", "templates/wishlist.html", "templates/other.html")),
+		TmplOther:           template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/other.html")),
+	}
 
 	//go:embed schema.sql
 	ddl       string
@@ -170,18 +168,7 @@ func getTemplate(tmpl TemplateType) *template.Template {
 		}
 	}
 
-	switch tmpl {
-	case TmplFullLandingpage:
-		return tmplFullLandingpage
-	case TmplFullOverview:
-		return tmplFullOverview
-	case TmplFullWishlist:
-		return tmplFullWishlist
-	case TmplOther:
-		return tmplOther
-	default:
-		return tmplOther
-	}
+	return allTemplates[tmpl]
 }
 
 func (s *session) isExpired() bool {
