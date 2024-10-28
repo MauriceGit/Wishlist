@@ -433,6 +433,68 @@ func assignNewOrderIndices(user, uuid string, ids []string) {
 	users[user].Wishlists[uuid] = wl
 }
 
+func loadUserDataFromDB(username string) (userdata, error) {
+
+	var newUser userdata
+	newUser.Wishlists = make(map[string]Wishlist)
+
+	dbUser, err := dbQueries.GetUser(ctx, username)
+	if err != nil {
+		fmt.Println(err)
+		return newUser, err
+	}
+
+	newUser.passwordHash = dbUser.Passwordhash
+
+	dbWishlists, err := dbQueries.GetWishlists(ctx, username)
+	if err != nil {
+		fmt.Println(err)
+		return newUser, err
+	}
+
+	for _, wl := range dbWishlists {
+		var wishlist Wishlist
+		wishlist.Title = wl.Title
+		wishlist.UUID = wl.Uuid
+		wishlist.Access = AccessState(wl.Access)
+		wishlist.Wishes = make(map[int64]Wish)
+
+		dbWishes, err := dbQueries.GetWishes(ctx, wl.Uuid)
+		if err != nil {
+			fmt.Println(err)
+			return newUser, err
+		}
+
+		for _, w := range dbWishes {
+			var wish Wish
+			wish.ID = w.ID
+			wish.Links = make(map[int64]string)
+			wish.Description = w.Description
+			wish.ImageUrl = w.ImageUrl
+			wish.Name = w.Name
+			wish.Reserved = w.Reserved != 0
+			wish.Active = w.Active != 0
+			wish.OrderIndex = w.OrderIndex
+
+			dbLinks, err := dbQueries.GetLinks(ctx, w.ID)
+			if err != nil {
+				fmt.Println(err)
+				return newUser, err
+			}
+
+			for _, l := range dbLinks {
+				wish.Links[l.ID] = l.Url
+			}
+
+			wishlist.Wishes[w.ID] = wish
+		}
+
+		newUser.Wishlists[wl.Uuid] = wishlist
+	}
+
+	return newUser, nil
+}
+
 // =====================================================================================================================
 
 // landingPageHandler handles the landing page. If the user is not authenticated, it will show the login screen.
@@ -755,9 +817,9 @@ func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Unable to parse form", http.StatusBadRequest)
 				return
 			}
-			oldHash := hashPassword(user, r.FormValue("old-password"))
-			newPassword1 := r.FormValue("new-password1")
-			newPassword2 := r.FormValue("new-password2")
+			oldHash := hashPassword(user, strings.TrimSpace(r.FormValue("old-password")))
+			newPassword1 := strings.TrimSpace(r.FormValue("new-password1"))
+			newPassword2 := strings.TrimSpace(r.FormValue("new-password2"))
 
 			// Wrong old password or New passwords are different
 			if !bytes.Equal(oldHash, users[user].passwordHash) || newPassword1 != newPassword2 {
@@ -799,8 +861,8 @@ func newuserHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Unable to parse form", http.StatusBadRequest)
 				return
 			}
-			newUser := r.FormValue("email")
-			newPassword := r.FormValue("password")
+			newUser := strings.TrimSpace(r.FormValue("email"))
+			newPassword := strings.TrimSpace(r.FormValue("password"))
 
 			// If the username is not empty and the user doesn't exist yet
 			if _, ok := users[newUser]; !ok && newUser != "" {
@@ -1027,8 +1089,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			user := r.FormValue("email")
-			password := r.FormValue("password")
+			user := strings.TrimSpace(r.FormValue("email"))
+			password := strings.TrimSpace(r.FormValue("password"))
 			pHash := hashPassword(user, password)
 
 			// First check, if the user is already loaded from db
@@ -1199,68 +1261,6 @@ func initDatabase() {
 	dbQueries = sqlc.New(db)
 }
 
-func loadUserDataFromDB(username string) (userdata, error) {
-
-	var newUser userdata
-	newUser.Wishlists = make(map[string]Wishlist)
-
-	dbUser, err := dbQueries.GetUser(ctx, username)
-	if err != nil {
-		fmt.Println(err)
-		return newUser, err
-	}
-
-	newUser.passwordHash = dbUser.Passwordhash
-
-	dbWishlists, err := dbQueries.GetWishlists(ctx, username)
-	if err != nil {
-		fmt.Println(err)
-		return newUser, err
-	}
-
-	for _, wl := range dbWishlists {
-		var wishlist Wishlist
-		wishlist.Title = wl.Title
-		wishlist.UUID = wl.Uuid
-		wishlist.Access = AccessState(wl.Access)
-		wishlist.Wishes = make(map[int64]Wish)
-
-		dbWishes, err := dbQueries.GetWishes(ctx, wl.Uuid)
-		if err != nil {
-			fmt.Println(err)
-			return newUser, err
-		}
-
-		for _, w := range dbWishes {
-			var wish Wish
-			wish.ID = w.ID
-			wish.Links = make(map[int64]string)
-			wish.Description = w.Description
-			wish.ImageUrl = w.ImageUrl
-			wish.Name = w.Name
-			wish.Reserved = w.Reserved != 0
-			wish.Active = w.Active != 0
-			wish.OrderIndex = w.OrderIndex
-
-			dbLinks, err := dbQueries.GetLinks(ctx, w.ID)
-			if err != nil {
-				fmt.Println(err)
-				return newUser, err
-			}
-
-			for _, l := range dbLinks {
-				wish.Links[l.ID] = l.Url
-			}
-
-			wishlist.Wishes[w.ID] = wish
-		}
-
-		newUser.Wishlists[wl.Uuid] = wishlist
-	}
-
-	return newUser, nil
-}
-
 func main() {
 
 	var certManager autocert.Manager
@@ -1325,6 +1325,8 @@ func main() {
 	// Create new user. This is shown to limited users
 	http.HandleFunc("/newuser", newuserHandler)
 
+	// Handles the re-ordering in the frontend. This is called by sortable after
+	// elements are reordered. A list of wish-ids is provided and updated in the backend
 	http.HandleFunc("/sorted", sortedHandler)
 
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
