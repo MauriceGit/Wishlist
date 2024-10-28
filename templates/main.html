@@ -40,7 +40,7 @@
                     <hr class="border-purple-100 mt-0 mb-2 lg:hidden">
 
                     {{if not .Authenticated}}
-                        <a {{if not .Authenticated}}href="/loginpage" hx-get="loginpage" hx-target="#main-content" hx-swap="innerHTML"{{end}} class="block px-4 py-2">
+                        <a {{if not .Authenticated}}href="/login" hx-get="login" hx-target="#main-content" hx-swap="innerHTML"{{end}} class="block px-4 py-2">
                             Login
                         </a>
                     {{end}}

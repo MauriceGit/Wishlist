@@ -17,7 +17,7 @@
 {{end}}
 
 {{define "wish-edit"}}
-<form hx-post="/edit/{{.ID}}/done" hx-include="[name='wishlist-uuid']" hx-target="this" hx-swap="outerHTML" class="bg-white p-6 shadow-md rounded-lg">
+<form hx-post="/edit/{{.ID}}" hx-include="[name='wishlist-uuid']" hx-target="this" hx-swap="outerHTML" class="bg-white p-6 shadow-md rounded-lg">
     <div class="flex flex-col gap-4">
 
         <!-- Name Input -->

@@ -698,88 +698,6 @@ func deletewishlistHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	var err error
-	if r.Method == http.MethodPost {
-
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Unable to parse form", http.StatusBadRequest)
-			if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
-				fmt.Println(err)
-			}
-			return
-		}
-
-		user := r.FormValue("email")
-		password := r.FormValue("password")
-		pHash := hashPassword(user, password)
-
-		// First check, if the user is already loaded from db
-		userData, ok := users[user]
-		if !ok {
-			if !loadUserFromDB(user) {
-				fmt.Printf("Error loading userdata from db: %v\n", err)
-				w.WriteHeader(http.StatusOK)
-				if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
-					fmt.Println(err)
-				}
-				return
-			}
-			// Reload the user data because for the first try, there wasn't any user data loaded from the db yet.
-			userData, _ = users[user]
-		}
-
-		if !bytes.Equal(pHash, userData.passwordHash) {
-			fmt.Printf("User '%v' exists, but wrong password.\n", user)
-			w.WriteHeader(http.StatusOK)
-			if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
-				fmt.Println(err)
-			}
-			return
-		}
-
-		err, sessionToken := newUUID()
-		if err != nil {
-			fmt.Printf("Error when generating a new uuid: %v\n", err)
-			w.WriteHeader(http.StatusUnauthorized)
-			if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
-				fmt.Println(err)
-			}
-			return
-		}
-		// Expires after 30 days
-		sessionExpire := time.Now().Add(24 * time.Hour * 30)
-
-		sessions[sessionToken] = session{
-			username: user,
-			expire:   sessionExpire,
-		}
-
-		fmt.Printf("New session for user '%v'\n", user)
-
-		sameSite := http.SameSiteStrictMode
-		secure := true
-		if debugMode {
-			sameSite = http.SameSiteLaxMode
-			secure = false
-		}
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     "session_token",
-			Value:    sessionToken,
-			Expires:  sessionExpire,
-			Path:     "/",      // Ensures the cookie is available throughout the site
-			SameSite: sameSite, // Use Lax, or change to Strict or None as per your needs
-			Secure:   secure,   // Must be true if SameSite=None (requires HTTPS)
-			HttpOnly: true,     // Prevents JavaScript from accessing the cookie
-		})
-
-		// User authenticated and everything is OK
-		w.Header().Set("HX-Redirect", "/")
-		w.WriteHeader(http.StatusOK)
-	}
-}
-
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	if user, ok := handleUserAuthentication(w, r); ok {
@@ -1010,11 +928,7 @@ func itemHandler(w http.ResponseWriter, r *http.Request) {
 
 func editHandler(w http.ResponseWriter, r *http.Request) {
 
-	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		id := parseId(r.PathValue("id"))
-		if id < 0 {
-			return
-		}
+	if user, ok := handleUserAuthentication(w, r); ok {
 
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "Unable to parse form", http.StatusBadRequest)
@@ -1026,15 +940,59 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
 			return
 		}
-		fmt.Printf("Show the edit of item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
-		if r.Header.Get("HX-Request") == "true" {
-			if err := getTemplate(TmplOther).ExecuteTemplate(w, "wish-edit", users[user].Wishlists[uuid].Wishes[id]); err != nil {
-				fmt.Println(err)
+		switch r.Method {
+		case http.MethodGet:
+			id := parseId(r.PathValue("id"))
+			if id < 0 {
+				return
 			}
-			return
+
+			fmt.Printf("Show the edit of item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
+
+			if r.Header.Get("HX-Request") == "true" {
+				if err := getTemplate(TmplOther).ExecuteTemplate(w, "wish-edit", users[user].Wishlists[uuid].Wishes[id]); err != nil {
+					fmt.Println(err)
+				}
+				return
+			}
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		case http.MethodPost:
+			id := parseId(r.PathValue("id"))
+			if id == -2 {
+				http.Error(w, "Unable to parse wish id", http.StatusBadRequest)
+				return
+			}
+
+			fmt.Printf("Editing Done for item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
+
+			reserved := false
+			orderIndex := int64(0)
+			if id >= 0 {
+				reserved = users[user].Wishlists[uuid].Wishes[id].Reserved
+				orderIndex = int64(len(users[user].Wishlists[uuid].Wishes))
+			}
+
+			tmpWish := Wish{
+				ID:          id,
+				Name:        r.FormValue("name"),
+				Description: r.FormValue("description"),
+				Links:       make(map[int64]string),
+				ImageUrl:    r.FormValue("imageUrl"),
+				Reserved:    reserved,
+				Active:      r.FormValue("active") != "",
+				OrderIndex:  orderIndex,
+			}
+
+			wishId, err := addWish(uuid, tmpWish, id, r.Form["link"])
+			if err != nil {
+				http.Error(w, "Error updating/adding wish", http.StatusInternalServerError)
+				return
+			}
+
+			wl := users[user].Wishlists[uuid]
+			writeTemplateWish(w, r, "wish-item", wl.Wishes[wishId], true, shortcuts[uuid], wl.Access)
 		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
 }
 
@@ -1052,9 +1010,10 @@ func addLinkHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func loginPageHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
+func loginHandler(w http.ResponseWriter, r *http.Request) {
 
+	switch r.Method {
+	case http.MethodGet:
 		if r.Header.Get("HX-Request") == "true" {
 			if err := getTemplate(TmplOther).ExecuteTemplate(w, "login", nil); err != nil {
 				fmt.Println(err)
@@ -1062,6 +1021,86 @@ func loginPageHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
+	case http.MethodPost:
+		var err error
+		if r.Method == http.MethodPost {
+
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Unable to parse form", http.StatusBadRequest)
+				if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+					fmt.Println(err)
+				}
+				return
+			}
+
+			user := r.FormValue("email")
+			password := r.FormValue("password")
+			pHash := hashPassword(user, password)
+
+			// First check, if the user is already loaded from db
+			userData, ok := users[user]
+			if !ok {
+				if !loadUserFromDB(user) {
+					fmt.Printf("Error loading userdata from db: %v\n", err)
+					w.WriteHeader(http.StatusOK)
+					if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+						fmt.Println(err)
+					}
+					return
+				}
+				// Reload the user data because for the first try, there wasn't any user data loaded from the db yet.
+				userData, _ = users[user]
+			}
+
+			if !bytes.Equal(pHash, userData.passwordHash) {
+				fmt.Printf("User '%v' exists, but wrong password.\n", user)
+				w.WriteHeader(http.StatusOK)
+				if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+					fmt.Println(err)
+				}
+				return
+			}
+
+			err, sessionToken := newUUID()
+			if err != nil {
+				fmt.Printf("Error when generating a new uuid: %v\n", err)
+				w.WriteHeader(http.StatusUnauthorized)
+				if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+					fmt.Println(err)
+				}
+				return
+			}
+			// Expires after 30 days
+			sessionExpire := time.Now().Add(24 * time.Hour * 30)
+
+			sessions[sessionToken] = session{
+				username: user,
+				expire:   sessionExpire,
+			}
+
+			fmt.Printf("New session for user '%v'\n", user)
+
+			sameSite := http.SameSiteStrictMode
+			secure := true
+			if debugMode {
+				sameSite = http.SameSiteLaxMode
+				secure = false
+			}
+
+			http.SetCookie(w, &http.Cookie{
+				Name:     "session_token",
+				Value:    sessionToken,
+				Expires:  sessionExpire,
+				Path:     "/",      // Ensures the cookie is available throughout the site
+				SameSite: sameSite, // Use Lax, or change to Strict or None as per your needs
+				Secure:   secure,   // Must be true if SameSite=None (requires HTTPS)
+				HttpOnly: true,     // Prevents JavaScript from accessing the cookie
+			})
+
+			// User authenticated and everything is OK
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(http.StatusOK)
+		}
 	}
 }
 
@@ -1279,17 +1318,13 @@ func main() {
 	http.HandleFunc("/item/{id}", itemHandler)
 	// Delete wish idx of wishlist with a given uuid
 	http.HandleFunc("/delete/{id}", deleteHandler)
-	// Show the edit-view of wish idx of wishlist with a given uuid
+	// Handler to edit the wish id of wishlist with a given uuid
 	http.HandleFunc("/edit/{id}", editHandler)
-	// Transfer all changes done in the edit of wish idx in wishlist of a given uuid
-	http.HandleFunc("/edit/{id}/done", editDoneHandler)
 	// Add a new link in the current wish edit. This does not need to correspond to a specific wish and
 	// will just extend the edit view by a new link field.
 	http.HandleFunc("/addlink", addLinkHandler)
 
-	// Shows a generic login page
-	http.HandleFunc("/loginpage", loginPageHandler)
-	// Handle user login with user/password provided
+	// Handles login page and user login with user/password provided
 	http.HandleFunc("/login", loginHandler)
 	// Handle logout of an active session
 	http.HandleFunc("/logout", logoutHandler)
