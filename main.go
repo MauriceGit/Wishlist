@@ -595,20 +595,51 @@ func newwishlistHandler(w http.ResponseWriter, r *http.Request) {
 
 func editwishlistHandler(w http.ResponseWriter, r *http.Request) {
 
-	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+	if user, ok := handleUserAuthentication(w, r); ok {
 		uuid := r.PathValue("uuid")
 		if !checkWishlistUUID(uuid) || shortcuts[uuid] != user {
 			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
 			return
 		}
 
-		if r.Header.Get("HX-Request") == "true" {
-			if err := getTemplate(TmplFullWishlist).ExecuteTemplate(w, "wishlist-edit", users[user].Wishlists[uuid]); err != nil {
-				fmt.Println(err)
+		switch r.Method {
+		case http.MethodGet:
+
+			if r.Header.Get("HX-Request") == "true" {
+				if err := getTemplate(TmplFullWishlist).ExecuteTemplate(w, "wishlist-edit", users[user].Wishlists[uuid]); err != nil {
+					fmt.Println(err)
+				}
+				return
 			}
-			return
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		case http.MethodPost:
+
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Unable to parse form", http.StatusBadRequest)
+				return
+			}
+
+			fmt.Printf("Wishlist UUID '%v' edited by user %v\n", uuid, user)
+			access := AccessPublic
+			switch r.FormValue("access") {
+			case "secret":
+				access = AccessSecret
+			case "public":
+				access = AccessPublic
+			case "shared":
+				access = AccessShared
+			}
+
+			if r.Header.Get("HX-Request") == "true" {
+				updateWishlist(user, uuid, r.FormValue("name"), access)
+				//renderWishlistTitle(w, users[user].Wishlists[uuid], true)
+				//return
+			}
+			//http.Redirect(w, r, "/wishlisttitle/"+uuid, http.StatusOK)
+
+			w.Header().Set("HX-Redirect", "/"+uuid)
+			w.WriteHeader(http.StatusOK)
 		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}
 }
 
@@ -640,43 +671,6 @@ func wishlisttitleHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-	}
-}
-
-func editwishlistDoneHandler(w http.ResponseWriter, r *http.Request) {
-
-	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPost {
-		uuid := r.PathValue("uuid")
-		if !checkWishlistUUID(uuid) || shortcuts[uuid] != user {
-			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
-			return
-		}
-
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Unable to parse form", http.StatusBadRequest)
-			return
-		}
-
-		fmt.Printf("Wishlist UUID '%v' edited by user %v\n", uuid, user)
-		access := AccessPublic
-		switch r.FormValue("access") {
-		case "secret":
-			access = AccessSecret
-		case "public":
-			access = AccessPublic
-		case "shared":
-			access = AccessShared
-		}
-
-		if r.Header.Get("HX-Request") == "true" {
-			updateWishlist(user, uuid, r.FormValue("name"), access)
-			//renderWishlistTitle(w, users[user].Wishlists[uuid], true)
-			//return
-		}
-		//http.Redirect(w, r, "/wishlisttitle/"+uuid, http.StatusOK)
-
-		w.Header().Set("HX-Redirect", "/"+uuid)
-		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -1300,12 +1294,10 @@ func main() {
 	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
 	// Create new wishlist for user
 	http.HandleFunc("/newwishlist", newwishlistHandler)
-	// Show the edit view of a wishlist
+	// Show the edit view of a wishlist and transfer all changes to the wishlist to the data structure and db
 	http.HandleFunc("/editwishlist/{uuid}", editwishlistHandler)
 	// Shows the title of the wishlist instead of the edit version
 	http.HandleFunc("/wishlisttitle/{uuid}", wishlisttitleHandler)
-	// Transfer all changes to the wishlist to the data structure and db
-	http.HandleFunc("/editwishlist/{uuid}/done", editwishlistDoneHandler)
 	// Delete a wishlist
 	http.HandleFunc("/deletewishlist/{uuid}", deletewishlistHandler)
 
