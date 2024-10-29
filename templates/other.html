@@ -102,7 +102,15 @@
 
     <input type='hidden' name='item' value='{{.Wish.ID}}'/>
 
-    {{if .Wish.ImageUrl}} <img src="{{.Wish.ImageUrl}}" alt="Icon" class="w-8 h-8 mr-4 rounded-lg"> {{end}}
+    <!-- This version shows the center square part of the image, if it has a high aspect ratio, without distortion! -->
+    {{if .Wish.ImageUrl}}
+        <div class="relative w-8 h-8 mr-4 overflow-hidden rounded-lg">
+            <!-- Small Image Icon with Click Event -->
+            <img src="{{.Wish.ImageUrl}}" alt="Icon"
+                 class="w-full h-full rounded-lg object-cover cursor-pointer"
+                 onclick="showOverlay(event)">
+        </div>
+    {{end}}
 
     <!-- Add a click event listener with plain JS to toggle the hidden class -->
     <div onclick="toggleDetails(this)" class="flex flex-col items-start {{if $showgray}} opacity-50 {{end}} flex-grow pr-5 pl-2">
@@ -188,17 +196,6 @@
 
 </div>
 
-<script>
-  // This function will toggle the hidden class for both the details and description-placeholder divs
-  function toggleDetails(element) {
-    let details = element.querySelector('.details');
-    let placeholder = element.querySelector('.description-placeholder');
-
-    // Toggle hidden class on both elements
-    details.classList.toggle('hidden');
-    placeholder.classList.toggle('hidden');
-  }
-</script>
 {{end}}
 
 
