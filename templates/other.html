@@ -104,7 +104,7 @@
 
     <!-- This version shows the center square part of the image, if it has a high aspect ratio, without distortion! -->
     {{if .Wish.ImageUrl}}
-        <div class="relative w-8 h-8 mr-4 overflow-hidden rounded-lg">
+        <div class="relative w-8 h-8 min-w-8 min-h-8 mr-4 overflow-hidden rounded-lg">
             <!-- Small Image Icon with Click Event -->
             <img src="{{.Wish.ImageUrl}}" alt="Icon"
                  class="w-full h-full rounded-lg object-cover cursor-pointer"
