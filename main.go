@@ -268,7 +268,13 @@ func createNewWishlist(user string) error {
 	users[user].Wishlists[uuid] = wishlist
 	shortcuts[uuid] = user
 
-	if err := dbQueries.CreateWishlist(ctx, sqlc.CreateWishlistParams{uuid, user, wishlist.Title, int64(wishlist.Access)}); err != nil {
+	params := sqlc.CreateWishlistParams{
+		Uuid:     uuid,
+		UserName: user,
+		Title:    wishlist.Title,
+		Access:   int64(wishlist.Access),
+	}
+	if err := dbQueries.CreateWishlist(ctx, params); err != nil {
 		fmt.Printf("Creating DB wishlist failed: %v\n", err)
 		return err
 	}
@@ -1023,10 +1029,10 @@ func editHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Printf("Editing Done for item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
 
 			reserved := false
-			orderIndex := int64(0)
+			orderIndex := int64(len(users[user].Wishlists[uuid].Wishes))
 			if id >= 0 {
 				reserved = users[user].Wishlists[uuid].Wishes[id].Reserved
-				orderIndex = int64(len(users[user].Wishlists[uuid].Wishes))
+				orderIndex = users[user].Wishlists[uuid].Wishes[id].OrderIndex
 			}
 
 			tmpWish := Wish{
