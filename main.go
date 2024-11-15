@@ -463,7 +463,12 @@ func createNewUser(user, password string) {
 func addVisitedWishlist(user, uuid string) {
 	mu.Lock()
 	defer mu.Unlock()
-	if _, ok := users[user].Visited[uuid]; !ok {
+
+	_, ok := users[user].Visited[uuid]
+	fmt.Printf("addVisitedWishlist: %v -- '%v'\n", ok, uuid)
+
+	if !ok {
+
 		if v, err := dbQueries.AddVisited(ctx, sqlc.AddVisitedParams{user, uuid}); err == nil {
 			if users[user].Visited == nil {
 				fmt.Println("Why is .Visited nil???")
@@ -497,6 +502,8 @@ func loadUserDataFromDB(username string) (userdata, error) {
 	var newUser userdata
 	newUser.Wishlists = make(map[string]Wishlist)
 	newUser.Visited = make(map[string]time.Time)
+
+	fmt.Printf("user.visited == %v\n", newUser.Visited)
 
 	dbUser, err := dbQueries.GetUser(ctx, username)
 	if err != nil {
