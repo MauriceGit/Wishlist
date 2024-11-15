@@ -47,6 +47,7 @@
 
                     {{if .Authenticated}}
                         <a href="/overview" hx-get="/overview" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Meine Wunschlisten</a>
+                        <a href="/visited" hx-get="/visited" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Besuchte Wunschlisten</a>
                         <a href="/changepassword" hx-get="/changepassword" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Passwort ändern</a>
                         {{if eq .Username "Maurice"}}
                              <a href="/newuser" hx-get="/newuser" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Benutzer anlegen</a>

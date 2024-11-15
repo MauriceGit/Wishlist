@@ -42,6 +42,7 @@ const (
 	TmplFullLandingpage TemplateType = iota
 	TmplFullOverview
 	TmplFullWishlist
+	TmplFullVisited
 	TmplOther
 )
 
@@ -92,6 +93,8 @@ type Wishlist struct {
 type userdata struct {
 	passwordHash []byte
 	Wishlists    map[string]Wishlist
+	// UUID -> time it was added/first-seen. Corresponds to the database entry!
+	Visited map[string]time.Time
 }
 
 var (
@@ -103,12 +106,13 @@ var (
 	// This avoids iterating all users when searching for a specific one.
 	shortcuts = map[string]string{}
 
-	funcMap = template.FuncMap{"newButton": newButton}
+	funcMap = template.FuncMap{"newButton": newButton, "getUserOfWishlist": getUserOfWishlist, "getTitleOfWishlist": getTitleOfWishlist}
 
 	allTemplates = map[TemplateType]*template.Template{
 		TmplFullLandingpage: template.Must(template.ParseFiles("templates/main.html", "templates/landing-page.html")),
 		TmplFullOverview:    template.Must(template.New("overview").Funcs(funcMap).ParseFiles("templates/main.html", "templates/overview.html", "templates/other.html")),
 		TmplFullWishlist:    template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/main.html", "templates/wishlist.html", "templates/other.html")),
+		TmplFullVisited:     template.Must(template.New("visited").Funcs(funcMap).ParseFiles("templates/main.html", "templates/visited.html")),
 		TmplOther:           template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/other.html")),
 	}
 
@@ -161,6 +165,10 @@ func getTemplate(tmpl TemplateType) *template.Template {
 			return template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
 				"templates/main.html", "templates/wishlist.html", "templates/other.html",
 			))
+		case TmplFullVisited:
+			return template.Must(template.New("visited").Funcs(funcMap).ParseFiles(
+				"templates/main.html", "templates/visited.html",
+			))
 		case TmplOther:
 			return template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
 				"templates/other.html",
@@ -177,6 +185,30 @@ func (s *session) isExpired() bool {
 
 func newButton(link, color, colorHighlight, side string) Button {
 	return Button{link, color, colorHighlight, side}
+}
+
+func getUserOfWishlist(uuid string) string {
+	if !loadWishlistFromDB(uuid) {
+		fmt.Printf("Loading uuid '%v' from db failed\n")
+		return "<unknown>"
+	}
+	if user, ok := shortcuts[uuid]; ok {
+		return user
+	}
+	return "<unknown>"
+}
+
+func getTitleOfWishlist(uuid string) string {
+	if !loadWishlistFromDB(uuid) {
+		fmt.Printf("Loading uuid '%v' from db failed\n")
+		return "<unknown>"
+	}
+	if user, ok := shortcuts[uuid]; ok {
+		if wl, ok := users[user].Wishlists[uuid]; ok {
+			return wl.Title
+		}
+	}
+	return "<unknown>"
 }
 
 // This function will be used in the html/template to provide both wish and current index to the sub-template!
@@ -388,6 +420,10 @@ func deleteWish(uuid string, id int64) {
 func loadUserFromDB(user string) bool {
 	mu.Lock()
 	defer mu.Unlock()
+	if _, ok := users[user]; ok {
+		fmt.Printf("User %v is already loaded.\n", user)
+		return true
+	}
 	userData, err := loadUserDataFromDB(user)
 	if err == nil {
 		users[user] = userData
@@ -423,6 +459,15 @@ func createNewUser(user, password string) {
 	}
 }
 
+// addVisitedWishlist adds the uuid as visited wishlist to the user.
+func addVisitedWishlist(user, uuid string) {
+	if _, ok := users[user].Visited[uuid]; !ok {
+		if v, err := dbQueries.AddVisited(ctx, sqlc.AddVisitedParams{user, uuid}); err != nil {
+			users[user].Visited[uuid] = v.Timestamp
+		}
+	}
+}
+
 func assignNewOrderIndices(user, uuid string, ids []string) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -443,6 +488,7 @@ func loadUserDataFromDB(username string) (userdata, error) {
 
 	var newUser userdata
 	newUser.Wishlists = make(map[string]Wishlist)
+	newUser.Visited = make(map[string]time.Time)
 
 	dbUser, err := dbQueries.GetUser(ctx, username)
 	if err != nil {
@@ -498,10 +544,28 @@ func loadUserDataFromDB(username string) (userdata, error) {
 		newUser.Wishlists[wl.Uuid] = wishlist
 	}
 
+	if dbVisited, err := dbQueries.GetAllVisited(ctx, username); err == nil {
+		for _, v := range dbVisited {
+			newUser.Visited[v.WishlistUuid] = v.Timestamp
+		}
+	} else {
+		fmt.Println(err)
+	}
+
 	return newUser, nil
 }
 
 // =====================================================================================================================
+
+func loadWishlistFromDB(uuid string) bool {
+	dbwl, err := dbQueries.GetWishlist(ctx, uuid)
+	if err != nil {
+		fmt.Printf("Wishlist with uuid '%v' not found in DB: %v\n", uuid, err)
+	} else {
+		return loadUserFromDB(dbwl.UserName)
+	}
+	return false
+}
 
 // landingPageHandler handles the landing page. If the user is not authenticated, it will show the login screen.
 // otherwise it will show the users wishlists.
@@ -515,12 +579,15 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Check the DB if there is a valid wishlist
 	if !uuidOK && uuid != "" {
-		dbwl, err := dbQueries.GetWishlist(ctx, uuid)
-		if err != nil {
-			fmt.Printf("Wishlist with uuid '%v' not found in DB: %v\n", uuid, err)
-		} else {
-			uuidOK = loadUserFromDB(dbwl.UserName)
-		}
+		/*
+			dbwl, err := dbQueries.GetWishlist(ctx, uuid)
+			if err != nil {
+				fmt.Printf("Wishlist with uuid '%v' not found in DB: %v\n", uuid, err)
+			} else {
+				uuidOK = loadUserFromDB(dbwl.UserName)
+			}
+		*/
+		uuidOK = loadWishlistFromDB(uuid)
 	}
 
 	// If we only show one wishlist, it doesn't matter if the user is authenticated or not!
@@ -533,6 +600,11 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 
 			sortedList := maps.Values(wishlist.Wishes)
 			sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
+
+			// Only save wishlists of other users
+			if user != wlUser {
+				addVisitedWishlist(user, uuid)
+			}
 
 			data := struct {
 				Title         string
@@ -554,9 +626,16 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 				Access:        wishlist.Access,
 			}
 
-			if err := getTemplate(TmplFullWishlist).ExecuteTemplate(w, "all", data); err != nil {
-				fmt.Println(err)
+			if r.Header.Get("HX-Request") == "true" {
+				if err := getTemplate(TmplFullWishlist).ExecuteTemplate(w, "content", data); err != nil {
+					fmt.Println(err)
+				}
+			} else {
+				if err := getTemplate(TmplFullWishlist).ExecuteTemplate(w, "all", data); err != nil {
+					fmt.Println(err)
+				}
 			}
+
 			return
 		}
 	}
@@ -597,6 +676,20 @@ func landingpageHandler(w http.ResponseWriter, r *http.Request) {
 func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
 		if err := getTemplate(TmplFullOverview).ExecuteTemplate(w, "content", users[user]); err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
+func visitedHandler(w http.ResponseWriter, r *http.Request) {
+	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
+
+		sortedUUIDs := maps.Keys(users[user].Visited)
+		sort.Slice(sortedUUIDs, func(i, j int) bool {
+			return users[user].Visited[sortedUUIDs[i]].Before(users[user].Visited[sortedUUIDs[j]])
+		})
+
+		if err := getTemplate(TmplFullVisited).ExecuteTemplate(w, "content", sortedUUIDs); err != nil {
 			fmt.Println(err)
 		}
 	}
@@ -1296,6 +1389,8 @@ func main() {
 	http.HandleFunc("/landingpage", landingpageHandler)
 	// Shows all available wishlists
 	http.HandleFunc("/overview", overviewHandler)
+	// Shows a list of visited wishlists
+	http.HandleFunc("/visited", visitedHandler)
 	// Shows a specific wishlist
 	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
 	// Create new wishlist for user

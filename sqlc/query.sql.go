@@ -9,6 +9,33 @@ import (
 	"context"
 )
 
+const addVisited = `-- name: AddVisited :one
+INSERT INTO visited (
+    user_name, wishlist_uuid
+)
+VALUES (
+    ?, ?
+)
+RETURNING id, user_name, wishlist_uuid, timestamp
+`
+
+type AddVisitedParams struct {
+	UserName     string
+	WishlistUuid string
+}
+
+func (q *Queries) AddVisited(ctx context.Context, arg AddVisitedParams) (Visited, error) {
+	row := q.db.QueryRowContext(ctx, addVisited, arg.UserName, arg.WishlistUuid)
+	var i Visited
+	err := row.Scan(
+		&i.ID,
+		&i.UserName,
+		&i.WishlistUuid,
+		&i.Timestamp,
+	)
+	return i, err
+}
+
 const createLink = `-- name: CreateLink :one
 INSERT INTO links (
     wish_id, url
@@ -180,6 +207,21 @@ func (q *Queries) DeleteUser(ctx context.Context, name string) error {
 	return err
 }
 
+const deleteVisited = `-- name: DeleteVisited :exec
+DELETE FROM visited
+WHERE user_name = ? AND wishlist_uuid = ?
+`
+
+type DeleteVisitedParams struct {
+	UserName     string
+	WishlistUuid string
+}
+
+func (q *Queries) DeleteVisited(ctx context.Context, arg DeleteVisitedParams) error {
+	_, err := q.db.ExecContext(ctx, deleteVisited, arg.UserName, arg.WishlistUuid)
+	return err
+}
+
 const deleteWish = `-- name: DeleteWish :exec
 DELETE FROM wishes
 WHERE id = ?
@@ -208,6 +250,40 @@ WHERE uuid = ?
 func (q *Queries) DeleteWishlist(ctx context.Context, uuid string) error {
 	_, err := q.db.ExecContext(ctx, deleteWishlist, uuid)
 	return err
+}
+
+const getAllVisited = `-- name: GetAllVisited :many
+SELECT id, user_name, wishlist_uuid, timestamp FROM visited
+WHERE user_name = ?
+ORDER BY timestamp
+`
+
+func (q *Queries) GetAllVisited(ctx context.Context, userName string) ([]Visited, error) {
+	rows, err := q.db.QueryContext(ctx, getAllVisited, userName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Visited
+	for rows.Next() {
+		var i Visited
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserName,
+			&i.WishlistUuid,
+			&i.Timestamp,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getLink = `-- name: GetLink :one

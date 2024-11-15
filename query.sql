@@ -133,3 +133,21 @@ WHERE wish_id = ?;
 
 -- name: DeleteAllLinks :exec
 DELETE FROM links;
+
+-- name: AddVisited :one
+INSERT INTO visited (
+    user_name, wishlist_uuid
+)
+VALUES (
+    ?, ?
+)
+RETURNING *;
+
+-- name: DeleteVisited :exec
+DELETE FROM visited
+WHERE user_name = ? AND wishlist_uuid = ?;
+
+-- name: GetAllVisited :many
+SELECT * FROM visited
+WHERE user_name = ?
+ORDER BY timestamp;

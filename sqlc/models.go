@@ -6,6 +6,7 @@ package sqlc
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Link struct {
@@ -17,6 +18,13 @@ type Link struct {
 type User struct {
 	Name         string
 	Passwordhash []byte
+}
+
+type Visited struct {
+	ID           int64
+	UserName     string
+	WishlistUuid string
+	Timestamp    time.Time
 }
 
 type Wish struct {
