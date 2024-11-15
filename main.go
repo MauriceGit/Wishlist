@@ -421,7 +421,6 @@ func loadUserFromDB(user string) bool {
 	mu.Lock()
 	defer mu.Unlock()
 	if _, ok := users[user]; ok {
-		fmt.Printf("User %v is already loaded.\n", user)
 		return true
 	}
 	userData, err := loadUserDataFromDB(user)
@@ -463,19 +462,8 @@ func createNewUser(user, password string) {
 func addVisitedWishlist(user, uuid string) {
 	mu.Lock()
 	defer mu.Unlock()
-
-	_, ok := users[user].Visited[uuid]
-	fmt.Printf("addVisitedWishlist: %v -- '%v'\n", ok, uuid)
-
-	if !ok {
-
+	if _, ok := users[user].Visited[uuid]; !ok {
 		if v, err := dbQueries.AddVisited(ctx, sqlc.AddVisitedParams{user, uuid}); err == nil {
-			if users[user].Visited == nil {
-				fmt.Println("Why is .Visited nil???")
-				tmp := users[user]
-				tmp.Visited = make(map[string]time.Time)
-				users[user] = tmp
-			}
 			users[user].Visited[uuid] = v.Timestamp
 		}
 	}
@@ -502,8 +490,6 @@ func loadUserDataFromDB(username string) (userdata, error) {
 	var newUser userdata
 	newUser.Wishlists = make(map[string]Wishlist)
 	newUser.Visited = make(map[string]time.Time)
-
-	fmt.Printf("user.visited == %v\n", newUser.Visited)
 
 	dbUser, err := dbQueries.GetUser(ctx, username)
 	if err != nil {
