@@ -617,7 +617,7 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 			sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
 
 			// Only save wishlists of other users
-			if user != wlUser {
+			if authenticated && user != wlUser {
 				addVisitedWishlist(user, uuid)
 			}
 
