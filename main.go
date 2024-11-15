@@ -461,8 +461,16 @@ func createNewUser(user, password string) {
 
 // addVisitedWishlist adds the uuid as visited wishlist to the user.
 func addVisitedWishlist(user, uuid string) {
+	mu.Lock()
+	defer mu.Unlock()
 	if _, ok := users[user].Visited[uuid]; !ok {
 		if v, err := dbQueries.AddVisited(ctx, sqlc.AddVisitedParams{user, uuid}); err == nil {
+			if users[user].Visited == nil {
+				fmt.Println("Why is .Visited nil???")
+				tmp := users[user]
+				tmp.Visited = make(map[string]time.Time)
+				users[user] = tmp
+			}
 			users[user].Visited[uuid] = v.Timestamp
 		}
 	}
