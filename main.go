@@ -43,6 +43,9 @@ const (
 	TmplFullOverview
 	TmplFullWishlist
 	TmplFullVisited
+	TmplFullLogin
+	TmplFullChangePassword
+	TmplFullNewUser
 	TmplOther
 )
 
@@ -109,11 +112,14 @@ var (
 	funcMap = template.FuncMap{"newButton": newButton, "getUserOfWishlist": getUserOfWishlist, "getTitleOfWishlist": getTitleOfWishlist}
 
 	allTemplates = map[TemplateType]*template.Template{
-		TmplFullLandingpage: template.Must(template.ParseFiles("templates/main.html", "templates/landing-page.html")),
-		TmplFullOverview:    template.Must(template.New("overview").Funcs(funcMap).ParseFiles("templates/main.html", "templates/overview.html", "templates/other.html")),
-		TmplFullWishlist:    template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/main.html", "templates/wishlist.html", "templates/other.html")),
-		TmplFullVisited:     template.Must(template.New("visited").Funcs(funcMap).ParseFiles("templates/main.html", "templates/visited.html")),
-		TmplOther:           template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/other.html")),
+		TmplFullLandingpage:    template.Must(template.ParseFiles("templates/main.html", "templates/landing-page.html")),
+		TmplFullOverview:       template.Must(template.New("overview").Funcs(funcMap).ParseFiles("templates/main.html", "templates/overview.html", "templates/other.html")),
+		TmplFullWishlist:       template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/main.html", "templates/wishlist.html", "templates/other.html")),
+		TmplFullVisited:        template.Must(template.New("visited").Funcs(funcMap).ParseFiles("templates/main.html", "templates/visited.html")),
+		TmplFullLogin:          template.Must(template.New("login").Funcs(funcMap).ParseFiles("templates/main.html", "templates/login.html")),
+		TmplFullChangePassword: template.Must(template.New("login").Funcs(funcMap).ParseFiles("templates/main.html", "templates/changepassword.html")),
+		TmplFullNewUser:        template.Must(template.New("login").Funcs(funcMap).ParseFiles("templates/main.html", "templates/newuser.html")),
+		TmplOther:              template.Must(template.New("testall").Funcs(funcMap).ParseFiles("templates/other.html")),
 	}
 
 	//go:embed schema.sql
@@ -169,10 +175,24 @@ func getTemplate(tmpl TemplateType) *template.Template {
 			return template.Must(template.New("visited").Funcs(funcMap).ParseFiles(
 				"templates/main.html", "templates/visited.html",
 			))
+		case TmplFullLogin:
+			template.Must(template.New("login").Funcs(funcMap).ParseFiles(
+				"templates/main.html", "templates/login.html",
+			))
 		case TmplOther:
 			return template.Must(template.New("testall").Funcs(funcMap).ParseFiles(
 				"templates/other.html",
 			))
+		case TmplFullChangePassword:
+			return template.Must(template.New("login").Funcs(funcMap).ParseFiles(
+				"templates/main.html", "templates/changepassword.html",
+			))
+		case TmplFullNewUser:
+			return template.Must(template.New("login").Funcs(funcMap).ParseFiles(
+				"templates/main.html", "templates/newuser.html",
+			))
+		default:
+			fmt.Println("ERROR: Forgot to add this template to debugMode getTemplate!")
 		}
 	}
 
@@ -273,8 +293,12 @@ func checkAuthentication(r *http.Request) (string, bool, int) {
 func handleUserAuthentication(w http.ResponseWriter, r *http.Request) (string, bool) {
 	user, ok, statusCode := checkAuthentication(r)
 	if !ok {
-		w.Header().Set("HX-Redirect", "/")
-		w.WriteHeader(statusCode)
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(statusCode)
+		} else {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		}
 	}
 
 	return user, ok
@@ -580,14 +604,6 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Check the DB if there is a valid wishlist
 	if !uuidOK && uuid != "" {
-		/*
-			dbwl, err := dbQueries.GetWishlist(ctx, uuid)
-			if err != nil {
-				fmt.Printf("Wishlist with uuid '%v' not found in DB: %v\n", uuid, err)
-			} else {
-				uuidOK = loadUserFromDB(dbwl.UserName)
-			}
-		*/
 		uuidOK = loadWishlistFromDB(uuid)
 	}
 
@@ -676,9 +692,25 @@ func landingpageHandler(w http.ResponseWriter, r *http.Request) {
 
 func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		if err := getTemplate(TmplFullOverview).ExecuteTemplate(w, "content", users[user]); err != nil {
-			fmt.Println(err)
+		if r.Header.Get("HX-Request") == "true" {
+			if err := getTemplate(TmplFullOverview).ExecuteTemplate(w, "content", users[user]); err != nil {
+				fmt.Println(err)
+			}
+		} else {
+			data := struct {
+				Wishlists     map[string]Wishlist
+				Authenticated bool
+				Username      string
+			}{
+				Wishlists:     users[user].Wishlists,
+				Authenticated: true,
+				Username:      user,
+			}
+			if err := getTemplate(TmplFullOverview).ExecuteTemplate(w, "all", data); err != nil {
+				fmt.Println(err)
+			}
 		}
+		return
 	}
 }
 
@@ -690,8 +722,24 @@ func visitedHandler(w http.ResponseWriter, r *http.Request) {
 			return users[user].Visited[sortedUUIDs[i]].Before(users[user].Visited[sortedUUIDs[j]])
 		})
 
-		if err := getTemplate(TmplFullVisited).ExecuteTemplate(w, "content", sortedUUIDs); err != nil {
-			fmt.Println(err)
+		data := struct {
+			VisitedWishlists []string
+			Authenticated    bool
+			Username         string
+		}{
+			VisitedWishlists: sortedUUIDs,
+			Authenticated:    true,
+			Username:         user,
+		}
+
+		if r.Header.Get("HX-Request") == "true" {
+			if err := getTemplate(TmplFullVisited).ExecuteTemplate(w, "content", data); err != nil {
+				fmt.Println(err)
+			}
+		} else {
+			if err := getTemplate(TmplFullVisited).ExecuteTemplate(w, "all", data); err != nil {
+				fmt.Println(err)
+			}
 		}
 	}
 }
@@ -707,48 +755,8 @@ func checkWishlistUUID(uuid string) bool {
 	return false
 }
 
-func wishlistHandler(w http.ResponseWriter, r *http.Request) {
-
-	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-
-		uuid := r.PathValue("uuid")
-		if !checkWishlistUUID(uuid) || shortcuts[uuid] != user {
-			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
-			return
-		}
-
-		wlUser := shortcuts[uuid]
-		wishlist := users[wlUser].Wishlists[uuid]
-
-		sortedList := maps.Values(wishlist.Wishes)
-		sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
-
-		data := struct {
-			Title     string
-			UUID      string
-			Access    AccessState
-			Wishes    []Wish
-			IsCreator bool
-			Creator   string
-		}{
-			Title:     wishlist.Title,
-			UUID:      wishlist.UUID,
-			Access:    wishlist.Access,
-			Wishes:    sortedList,
-			IsCreator: user == wlUser,
-			Creator:   wlUser,
-		}
-
-		if err := getTemplate(TmplFullWishlist).ExecuteTemplate(w, "content", data); err != nil {
-			fmt.Println(err)
-		}
-	}
-}
-
 func newwishlistHandler(w http.ResponseWriter, r *http.Request) {
-
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-
 		createNewWishlist(user)
 		w.Header().Set("HX-Redirect", "/")
 		w.WriteHeader(http.StatusOK)
@@ -895,8 +903,12 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: true,     // Prevents JavaScript from accessing the cookie
 		})
 
-		w.Header().Set("HX-Redirect", "/")
-		w.WriteHeader(http.StatusOK)
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(http.StatusOK)
+		} else {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		}
 	}
 }
 
@@ -907,11 +919,22 @@ func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			if r.Header.Get("HX-Request") == "true" {
-				if err := getTemplate(TmplOther).ExecuteTemplate(w, "changepassword", nil); err != nil {
+				if err := getTemplate(TmplFullChangePassword).ExecuteTemplate(w, "content", nil); err != nil {
 					fmt.Println(err)
 				}
-				return
+			} else {
+				data := struct {
+					Authenticated bool
+					Username      string
+				}{
+					Authenticated: true,
+					Username:      user,
+				}
+				if err := getTemplate(TmplFullChangePassword).ExecuteTemplate(w, "all", data); err != nil {
+					fmt.Println(err)
+				}
 			}
+
 		case http.MethodPost:
 			if err := r.ParseForm(); err != nil {
 				http.Error(w, "Unable to parse form", http.StatusBadRequest)
@@ -924,7 +947,7 @@ func changepasswordHandler(w http.ResponseWriter, r *http.Request) {
 			// Wrong old password or New passwords are different
 			if !bytes.Equal(oldHash, users[user].passwordHash) || newPassword1 != newPassword2 {
 				if r.Header.Get("HX-Request") == "true" {
-					if err := getTemplate(TmplOther).ExecuteTemplate(w, "changepassword-error", nil); err != nil {
+					if err := getTemplate(TmplFullChangePassword).ExecuteTemplate(w, "changepassword-error", nil); err != nil {
 						fmt.Println(err)
 					}
 					return
@@ -945,17 +968,34 @@ func newuserHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok {
 		// Make sure ONLY I can create new users right now.
 		if user != "Maurice" {
+			if r.Header.Get("HX-Request") == "true" {
+				w.Header().Set("HX-Redirect", "/")
+				w.WriteHeader(http.StatusOK)
+			} else {
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+			}
 			return
 		}
 
 		switch r.Method {
 		case http.MethodGet:
 			if r.Header.Get("HX-Request") == "true" {
-				if err := getTemplate(TmplOther).ExecuteTemplate(w, "newuser", nil); err != nil {
+				if err := getTemplate(TmplFullNewUser).ExecuteTemplate(w, "content", nil); err != nil {
 					fmt.Println(err)
 				}
-				return
+			} else {
+				data := struct {
+					Authenticated bool
+					Username      string
+				}{
+					Authenticated: true,
+					Username:      user,
+				}
+				if err := getTemplate(TmplFullNewUser).ExecuteTemplate(w, "all", data); err != nil {
+					fmt.Println(err)
+				}
 			}
+			return
 		case http.MethodPost:
 			if err := r.ParseForm(); err != nil {
 				http.Error(w, "Unable to parse form", http.StatusBadRequest)
@@ -1170,20 +1210,35 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+
 		if r.Header.Get("HX-Request") == "true" {
-			if err := getTemplate(TmplOther).ExecuteTemplate(w, "login", nil); err != nil {
+			if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "content", nil); err != nil {
+				fmt.Println(err)
+			}
+			return
+		} else {
+
+			user, authenticated, _ := checkAuthentication(r)
+			data := struct {
+				Authenticated bool
+				Username      string
+			}{
+				Authenticated: authenticated,
+				Username:      user,
+			}
+
+			if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "all", data); err != nil {
 				fmt.Println(err)
 			}
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	case http.MethodPost:
-		var err error
 		if r.Method == http.MethodPost {
 
 			if err := r.ParseForm(); err != nil {
 				http.Error(w, "Unable to parse form", http.StatusBadRequest)
-				if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+				if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "login-error", nil); err != nil {
 					fmt.Println(err)
 				}
 				return
@@ -1197,9 +1252,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			userData, ok := users[user]
 			if !ok {
 				if !loadUserFromDB(user) {
-					fmt.Printf("Error loading userdata from db: %v\n", err)
+					fmt.Printf("Error loading userdata from db (Login attempt with non-existant username '%v')\n", user)
 					w.WriteHeader(http.StatusOK)
-					if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+					if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "login-error", nil); err != nil {
 						fmt.Println(err)
 					}
 					return
@@ -1211,7 +1266,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			if !bytes.Equal(pHash, userData.passwordHash) {
 				fmt.Printf("User '%v' exists, but wrong password.\n", user)
 				w.WriteHeader(http.StatusOK)
-				if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+				if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "login-error", nil); err != nil {
 					fmt.Println(err)
 				}
 				return
@@ -1221,7 +1276,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				fmt.Printf("Error when generating a new uuid: %v\n", err)
 				w.WriteHeader(http.StatusUnauthorized)
-				if err := getTemplate(TmplOther).ExecuteTemplate(w, "login-error", nil); err != nil {
+				if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "login-error", nil); err != nil {
 					fmt.Println(err)
 				}
 				return
@@ -1385,6 +1440,7 @@ func main() {
 
 	// Shows /overview when logged in or /landingpage otherwise
 	http.HandleFunc("/", allHandler)
+	// Shows a specific wishlist with or without htmx
 	http.HandleFunc("/{uuid}", allHandler)
 	// Shows a generic landing page
 	http.HandleFunc("/landingpage", landingpageHandler)
@@ -1392,8 +1448,6 @@ func main() {
 	http.HandleFunc("/overview", overviewHandler)
 	// Shows a list of visited wishlists
 	http.HandleFunc("/visited", visitedHandler)
-	// Shows a specific wishlist
-	http.HandleFunc("/wishlist/{uuid}", wishlistHandler)
 	// Create new wishlist for user
 	http.HandleFunc("/newwishlist", newwishlistHandler)
 	// Show the edit view of a wishlist and transfer all changes to the wishlist to the data structure and db

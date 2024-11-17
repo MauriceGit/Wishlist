@@ -40,19 +40,17 @@
                     <hr class="border-purple-100 mt-0 mb-2 lg:hidden">
 
                     {{if not .Authenticated}}
-                        <a {{if not .Authenticated}}href="/login" hx-get="login" hx-target="#main-content" hx-swap="innerHTML"{{end}} class="block px-4 py-2">
+                        <a href="/login" hx-get="login" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true" class="block px-4 py-2">
                             Login
                         </a>
-                    {{end}}
-
-                    {{if .Authenticated}}
-                        <a href="/overview" hx-get="/overview" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Meine Wunschlisten</a>
-                        <a href="/visited" hx-get="/visited" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Besuchte Wunschlisten</a>
-                        <a href="/changepassword" hx-get="/changepassword" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Passwort ändern</a>
+                    {{else}}
+                        <a href="/overview" hx-get="/overview" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true" class="block px-4 py-2">Meine Wunschlisten</a>
+                        <a href="/visited" hx-get="/visited" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true" class="block px-4 py-2">Besuchte Wunschlisten</a>
+                        <a href="/changepassword" hx-get="/changepassword" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true" class="block px-4 py-2">Passwort ändern</a>
                         {{if eq .Username "Maurice"}}
-                             <a href="/newuser" hx-get="/newuser" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Benutzer anlegen</a>
+                             <a href="/newuser" hx-get="/newuser" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true" class="block px-4 py-2">Benutzer anlegen</a>
                         {{end}}
-                        <a href="/logout" hx-get="logout" hx-target="#main-content" hx-swap="innerHTML" class="block px-4 py-2">Logout ({{.Username}})</a>
+                        <a href="/logout" hx-get="logout" hx-target="#main-content" hx-swap="innerHTML" hx-push-url="true" class="block px-4 py-2">Logout ({{.Username}})</a>
                     {{end}}
                 </div>
             </div>
@@ -62,13 +60,6 @@
     <div id="main-content">
         <!-- Placeholder for page-specific content like the landing-page, overview or a specific wishlist -->
         {{block "content" .}} {{end}}
-        {{/*}}
-            {{if .Authenticated}}
-                {{template "overview" .}}
-            {{else}}
-                {{template "landing-page"}}
-            {{end}}
-        {{*/}}
     </div>
 
     <script>
