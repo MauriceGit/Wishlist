@@ -246,14 +246,14 @@ func parseId(id string) int64 {
 }
 
 // https://stackoverflow.com/questions/15130321/is-there-a-method-to-generate-a-uuid-with-go-language
-func newUUID() (error, string) {
+func newUUID() (string, error) {
 	b := make([]byte, 16)
 	_, err := rand.Read(b)
 	if err != nil {
 		fmt.Println("Error: ", err)
-		return err, ""
+		return "", err
 	}
-	return nil, fmt.Sprintf("%v-%X", time.Now().Unix(), b)
+	return fmt.Sprintf("%v-%X", time.Now().Unix(), b), nil
 }
 
 func hashPassword(user, password string) []byte {
@@ -310,7 +310,7 @@ func handleUserAuthentication(w http.ResponseWriter, r *http.Request) (string, b
 func createNewWishlist(user string) error {
 	mu.Lock()
 	defer mu.Unlock()
-	err, uuid := newUUID()
+	uuid, err := newUUID()
 	if err != nil {
 		fmt.Printf("Error creating new UUID: %v\n", err)
 		return err
@@ -469,7 +469,7 @@ func loadUserFromDB(user string) bool {
 	userData, err := loadUserDataFromDB(user)
 	if err == nil {
 		users[user] = userData
-		for wlUUID, _ := range users[user].Wishlists {
+		for wlUUID := range users[user].Wishlists {
 			shortcuts[wlUUID] = user
 		}
 		return true
@@ -898,7 +898,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 		delete(sessions, sessionToken)
 
 		// remove the shortcuts from the users wishlist uuids to user
-		for uuid, _ := range users[user].Wishlists {
+		for uuid := range users[user].Wishlists {
 			delete(shortcuts, uuid)
 		}
 
@@ -1280,7 +1280,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				// Reload the user data because for the first try, there wasn't any user data loaded from the db yet.
-				userData, _ = users[user]
+				userData = users[user]
 			}
 
 			if !bytes.Equal(pHash, userData.passwordHash) {
@@ -1292,7 +1292,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			err, sessionToken := newUUID()
+			sessionToken, err := newUUID()
 			if err != nil {
 				fmt.Printf("Error when generating a new uuid: %v\n", err)
 				w.WriteHeader(http.StatusUnauthorized)
@@ -1346,56 +1346,6 @@ func newItemHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
-	}
-}
-
-func editDoneHandler(w http.ResponseWriter, r *http.Request) {
-
-	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodPost {
-		id := parseId(r.PathValue("id"))
-		if id == -2 {
-			http.Error(w, "Unable to parse wish id", http.StatusBadRequest)
-			return
-		}
-
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Unable to parse form", http.StatusBadRequest)
-			return
-		}
-
-		uuid := r.FormValue("wishlist-uuid")
-		if !checkWishlistUUID(uuid) || shortcuts[uuid] != user {
-			fmt.Printf("Wishlist UUID '%v' doesn't exist or results in invalid user or index\n", uuid)
-			return
-		}
-		fmt.Printf("Editing Done for item %v for user '%v' and wishlist with uuid: %v\n", id, user, uuid)
-
-		reserved := false
-		orderIndex := int64(0)
-		if id >= 0 {
-			reserved = users[user].Wishlists[uuid].Wishes[id].Reserved
-			orderIndex = int64(len(users[user].Wishlists[uuid].Wishes))
-		}
-
-		tmpWish := Wish{
-			ID:          id,
-			Name:        r.FormValue("name"),
-			Description: r.FormValue("description"),
-			Links:       make(map[int64]string),
-			ImageUrl:    r.FormValue("imageUrl"),
-			Reserved:    reserved,
-			Active:      r.FormValue("active") != "",
-			OrderIndex:  orderIndex,
-		}
-
-		wishId, err := addWish(uuid, tmpWish, id, r.Form["link"])
-		if err != nil {
-			http.Error(w, "Error updating/adding wish", http.StatusInternalServerError)
-			return
-		}
-
-		wl := users[user].Wishlists[uuid]
-		writeTemplateWish(w, r, "wish-item", wl.Wishes[wishId], true, shortcuts[uuid], wl.Access)
 	}
 }
 
