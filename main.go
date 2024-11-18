@@ -209,7 +209,7 @@ func newButton(link, color, colorHighlight, side string) Button {
 
 func getUserOfWishlist(uuid string) string {
 	if !loadWishlistFromDB(uuid) {
-		fmt.Printf("Loading uuid '%v' from db failed\n")
+		fmt.Printf("Loading uuid '%v' from db failed\n", uuid)
 		return "<unknown>"
 	}
 	if user, ok := shortcuts[uuid]; ok {
@@ -220,7 +220,7 @@ func getUserOfWishlist(uuid string) string {
 
 func getTitleOfWishlist(uuid string) string {
 	if !loadWishlistFromDB(uuid) {
-		fmt.Printf("Loading uuid '%v' from db failed\n")
+		fmt.Printf("Loading uuid '%v' from db failed\n", uuid)
 		return "<unknown>"
 	}
 	if user, ok := shortcuts[uuid]; ok {
@@ -345,7 +345,12 @@ func updateWishlist(user, uuid, title string, access AccessState) {
 	tmpWishlist.Title = title
 	tmpWishlist.Access = access
 	users[user].Wishlists[uuid] = tmpWishlist
-	if err := dbQueries.UpdateWishlist(ctx, sqlc.UpdateWishlistParams{title, int64(access), uuid}); err != nil {
+	params := sqlc.UpdateWishlistParams{
+		Title:  title,
+		Access: int64(access),
+		Uuid:   uuid,
+	}
+	if err := dbQueries.UpdateWishlist(ctx, params); err != nil {
 		fmt.Printf("Wishlist title update for db failed: %v\n", err)
 	}
 }
@@ -365,8 +370,8 @@ func reserveWish(uuid string, id, reserved int64) {
 	wish := users[shortcuts[uuid]].Wishlists[uuid].Wishes[id]
 	wish.Reserved = reserved != 0
 	users[shortcuts[uuid]].Wishlists[uuid].Wishes[id] = wish
-
-	if err := dbQueries.SetWishReserve(ctx, sqlc.SetWishReserveParams{reserved, id}); err != nil {
+	params := sqlc.SetWishReserveParams{Reserved: reserved, ID: id}
+	if err := dbQueries.SetWishReserve(ctx, params); err != nil {
 		fmt.Printf("Wish reserve db write failed: %v\n", err)
 	}
 }
@@ -388,18 +393,31 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 
 	// Insert with into db if it is a new wish
 	if wishId == -1 {
-		dbWish, err := dbQueries.CreateWish(ctx, sqlc.CreateWishParams{
-			uuid, wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wish.OrderIndex,
-		})
+		params := sqlc.CreateWishParams{
+			WishlistUuid: uuid,
+			Name:         wish.Name,
+			Description:  wish.Description,
+			ImageUrl:     wish.ImageUrl,
+			Reserved:     dbReserved,
+			Active:       dbActive, OrderIndex: wish.OrderIndex,
+		}
+		dbWish, err := dbQueries.CreateWish(ctx, params)
 		if err != nil {
 			fmt.Printf("Creating new wish in db failed: %v\n", err)
 			return -1, err
 		}
 		wishId = dbWish.ID
 	} else {
-		if err := dbQueries.UpdateWish(ctx, sqlc.UpdateWishParams{
-			wish.Name, wish.Description, wish.ImageUrl, dbReserved, dbActive, wish.OrderIndex, wishId,
-		}); err != nil {
+		params := sqlc.UpdateWishParams{
+			Name:        wish.Name,
+			Description: wish.Description,
+			ImageUrl:    wish.ImageUrl,
+			Reserved:    dbReserved,
+			Active:      dbActive,
+			OrderIndex:  wish.OrderIndex,
+			ID:          wishId,
+		}
+		if err := dbQueries.UpdateWish(ctx, params); err != nil {
 			fmt.Printf("Updating wish in db failed: %v\n", err)
 			return -1, err
 		}
@@ -415,7 +433,8 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 	// (Re-)Insert all links from the form into the database! Use the unique ID to make the connection to the wish!
 	for _, l := range links {
 		if l != "" {
-			dbLink, err := dbQueries.CreateLink(ctx, sqlc.CreateLinkParams{wishId, l})
+			params := sqlc.CreateLinkParams{WishID: wishId, Url: l}
+			dbLink, err := dbQueries.CreateLink(ctx, params)
 			if err != nil {
 				fmt.Printf("Creating link in db failed: %v\n", err)
 				return -1, err
@@ -464,8 +483,8 @@ func updatePassword(user, password string) {
 	tmpUserdata := users[user]
 	tmpUserdata.passwordHash = hashPassword(user, password)
 	users[user] = tmpUserdata
-
-	if err := dbQueries.UpdatePassword(ctx, sqlc.UpdatePasswordParams{tmpUserdata.passwordHash, user}); err != nil {
+	params := sqlc.UpdatePasswordParams{Passwordhash: tmpUserdata.passwordHash, Name: user}
+	if err := dbQueries.UpdatePassword(ctx, params); err != nil {
 		fmt.Printf("Error updating password in db: %v\n", err)
 	}
 }
@@ -477,7 +496,8 @@ func createNewUser(user, password string) {
 		passwordHash: hashPassword(user, password),
 		Wishlists:    make(map[string]Wishlist),
 	}
-	if err := dbQueries.CreateUser(ctx, sqlc.CreateUserParams{user, users[user].passwordHash}); err != nil {
+	params := sqlc.CreateUserParams{Name: user, Passwordhash: users[user].passwordHash}
+	if err := dbQueries.CreateUser(ctx, params); err != nil {
 		fmt.Printf("Error creating new user in db: %v\n", err)
 	}
 }
@@ -487,7 +507,8 @@ func addVisitedWishlist(user, uuid string) {
 	mu.Lock()
 	defer mu.Unlock()
 	if _, ok := users[user].Visited[uuid]; !ok {
-		if v, err := dbQueries.AddVisited(ctx, sqlc.AddVisitedParams{user, uuid}); err == nil {
+		params := sqlc.AddVisitedParams{UserName: user, WishlistUuid: uuid}
+		if v, err := dbQueries.AddVisited(ctx, params); err == nil {
 			users[user].Visited[uuid] = v.Timestamp
 		}
 	}
@@ -502,7 +523,8 @@ func assignNewOrderIndices(user, uuid string, ids []string) {
 		w := wl.Wishes[id]
 		w.OrderIndex = int64(i)
 		wl.Wishes[id] = w
-		if err := dbQueries.SetWishOrderIndex(ctx, sqlc.SetWishOrderIndexParams{int64(i), id}); err != nil {
+		params := sqlc.SetWishOrderIndexParams{OrderIndex: int64(i), ID: id}
+		if err := dbQueries.SetWishOrderIndex(ctx, params); err != nil {
 			fmt.Printf("Error updating order_index in db: %v\n", err)
 		}
 	}
@@ -1215,7 +1237,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "content", nil); err != nil {
 				fmt.Println(err)
 			}
-			return
 		} else {
 
 			user, authenticated, _ := checkAuthentication(r)
@@ -1230,9 +1251,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			if err := getTemplate(TmplFullLogin).ExecuteTemplate(w, "all", data); err != nil {
 				fmt.Println(err)
 			}
-			return
 		}
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
 	case http.MethodPost:
 		if r.Method == http.MethodPost {
 
