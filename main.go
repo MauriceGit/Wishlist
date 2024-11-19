@@ -779,8 +779,12 @@ func checkWishlistUUID(uuid string) bool {
 
 func newwishlistHandler(w http.ResponseWriter, r *http.Request) {
 	if user, ok := handleUserAuthentication(w, r); ok && r.Method == http.MethodGet {
-		createNewWishlist(user)
-		w.Header().Set("HX-Redirect", "/")
+		if err := createNewWishlist(user); err != nil {
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("HX-Redirect", "/overview")
 		w.WriteHeader(http.StatusOK)
 	}
 }
@@ -1388,24 +1392,6 @@ func initDatabase() {
 
 func main() {
 
-	var certManager autocert.Manager
-	var server *http.Server
-	if !debugMode {
-		certManager = autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
-			Cache:      autocert.DirCache("certs"),
-		}
-
-		server = &http.Server{
-			Addr: ":https",
-			TLSConfig: &tls.Config{
-				GetCertificate: certManager.GetCertificate,
-				MinVersion:     tls.VersionTLS13,
-			},
-		}
-	}
-
 	initDatabase()
 
 	// Shows /overview when logged in or /landingpage otherwise
@@ -1460,9 +1446,32 @@ func main() {
 	})
 
 	if !debugMode {
-		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
-		log.Fatal(server.ListenAndServeTLS("", ""))
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
+			Cache:      autocert.DirCache("certs"),
+		}
+
+		tlsServer := &http.Server{
+			Addr: ":https",
+			TLSConfig: &tls.Config{
+				GetCertificate: certManager.GetCertificate,
+				MinVersion:     tls.VersionTLS13,
+			},
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		certServer := &http.Server{
+			Addr:              ":http",
+			Handler:           certManager.HTTPHandler(nil),
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		log.Fatal(certServer.ListenAndServe())
+		log.Fatal(tlsServer.ListenAndServeTLS("", ""))
 	} else {
-		http.ListenAndServe(":8080", nil)
+		debugServer := &http.Server{
+			Addr:              ":8080",
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		log.Fatal(debugServer.ListenAndServe())
 	}
 }
