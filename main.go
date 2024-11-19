@@ -1392,6 +1392,25 @@ func initDatabase() {
 
 func main() {
 
+	var certManager autocert.Manager
+	var server *http.Server
+	if !debugMode {
+		certManager = autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
+			Cache:      autocert.DirCache("certs"),
+		}
+
+		server = &http.Server{
+			Addr: ":https",
+			TLSConfig: &tls.Config{
+				GetCertificate: certManager.GetCertificate,
+				MinVersion:     tls.VersionTLS13,
+			},
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+	}
+
 	initDatabase()
 
 	// Shows /overview when logged in or /landingpage otherwise
@@ -1446,27 +1465,8 @@ func main() {
 	})
 
 	if !debugMode {
-		certManager := autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist("wuenscheahoi.duckdns.org", "www.wuenscheahoi.duckdns.org"),
-			Cache:      autocert.DirCache("certs"),
-		}
-
-		tlsServer := &http.Server{
-			Addr: ":https",
-			TLSConfig: &tls.Config{
-				GetCertificate: certManager.GetCertificate,
-				MinVersion:     tls.VersionTLS13,
-			},
-			ReadHeaderTimeout: 5 * time.Second,
-		}
-		certServer := &http.Server{
-			Addr:              ":http",
-			Handler:           certManager.HTTPHandler(nil),
-			ReadHeaderTimeout: 5 * time.Second,
-		}
-		log.Fatal(certServer.ListenAndServe())
-		log.Fatal(tlsServer.ListenAndServeTLS("", ""))
+		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
+		log.Fatal(server.ListenAndServeTLS("", ""))
 	} else {
 		debugServer := &http.Server{
 			Addr:              ":8080",
