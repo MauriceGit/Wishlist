@@ -1461,7 +1461,14 @@ func main() {
 			ReadHeaderTimeout: 5 * time.Second,
 		}
 
-		go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
+		certServer := &http.Server{
+			Addr:              ":http",
+			ReadHeaderTimeout: 5 * time.Second,
+			Handler:           certManager.HTTPHandler(nil),
+		}
+
+		//go http.ListenAndServe(":http", certManager.HTTPHandler(nil))
+		go certServer.ListenAndServe()
 		log.Fatal(server.ListenAndServeTLS("", ""))
 	} else {
 		debugServer := &http.Server{
