@@ -15,6 +15,12 @@ type Link struct {
 	Url    string
 }
 
+type Session struct {
+	ID       string
+	UserName string
+	Expire   time.Time
+}
+
 type User struct {
 	Name         string
 	Passwordhash []byte

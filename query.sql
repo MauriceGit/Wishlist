@@ -151,3 +151,19 @@ WHERE user_name = ? AND wishlist_uuid = ?;
 SELECT * FROM visited
 WHERE user_name = ?
 ORDER BY timestamp;
+
+-- name: AddSession :exec
+INSERT INTO sessions (
+    id, user_name, expire
+)
+VALUES (
+    ?, ?, ?
+);
+
+-- name: GetSession :one
+SELECT * FROM sessions
+WHERE id = ?;
+
+-- name: DeleteSession :exec
+DELETE FROM sessions
+WHERE id = ?;

@@ -274,15 +274,14 @@ func checkAuthentication(r *http.Request) (string, bool, int) {
 	}
 	sessionToken := c.Value
 
-	session, ok := sessions[sessionToken]
+	session, ok := getUserSession(sessionToken)
 	if !ok {
-		fmt.Println("Session not ok!")
 		return "", false, http.StatusUnauthorized
 	}
 
 	if session.isExpired() {
-		fmt.Println("Session expired???")
-		delete(sessions, sessionToken)
+		fmt.Printf("Session of user '%v' expired\n", session.username)
+		deleteUserSession(sessionToken)
 		return "", false, http.StatusUnauthorized
 	}
 	return session.username, true, 0
@@ -306,6 +305,53 @@ func handleUserAuthentication(w http.ResponseWriter, r *http.Request) (string, b
 
 // =====================================================================================================================
 // Functions to write to db and update the internal datastructure
+
+func addUserSession(sessionToken, user string, expire time.Time) {
+	sessions[sessionToken] = session{
+		username: user,
+		expire:   expire,
+	}
+	params := sqlc.AddSessionParams{
+		ID:       sessionToken,
+		UserName: user,
+		Expire:   expire,
+	}
+	if err := dbQueries.AddSession(ctx, params); err != nil {
+		fmt.Printf("Error adding new session for user '%v' to db: %v\n", user, err)
+	}
+}
+
+// When loading a session from db, we also have to take care to load userdata from db as well for the
+// corresponding session token.
+func getUserSession(sessionToken string) (session, bool) {
+	ses, ok := sessions[sessionToken]
+	if !ok {
+		// Load session from db if it is not cached already
+		dbSession, err := dbQueries.GetSession(ctx, sessionToken)
+		if err != nil {
+			fmt.Printf("Error loading session from db: %v\n", err)
+			return ses, false
+		}
+		ses = session{dbSession.UserName, dbSession.Expire}
+		sessions[sessionToken] = ses
+	}
+
+	// If userdata is already cached, this doesn't do anything!
+	if !loadUserFromDB(ses.username) {
+		fmt.Printf("Error loading userdata from db for user '%v' after session load from db!\n", ses.username)
+		deleteUserSession(sessionToken)
+		return ses, false
+	}
+
+	return ses, true
+}
+
+func deleteUserSession(sessionToken string) {
+	delete(sessions, sessionToken)
+	if err := dbQueries.DeleteSession(ctx, sessionToken); err != nil {
+		fmt.Printf("Error deleting session from db: %v\n", err)
+	}
+}
 
 func createNewWishlist(user string) error {
 	mu.Lock()
@@ -899,7 +945,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Successfully logged out user '%v'\n", user)
 
 		// remove user session!
-		delete(sessions, sessionToken)
+		deleteUserSession(sessionToken)
 
 		// remove the shortcuts from the users wishlist uuids to user
 		for uuid := range users[user].Wishlists {
@@ -1308,10 +1354,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			// Expires after 30 days
 			sessionExpire := time.Now().Add(24 * time.Hour * 30)
 
-			sessions[sessionToken] = session{
-				username: user,
-				expire:   sessionExpire,
-			}
+			addUserSession(sessionToken, user, sessionExpire)
 
 			fmt.Printf("New session for user '%v'\n", user)
 

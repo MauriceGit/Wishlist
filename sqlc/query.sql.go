@@ -7,7 +7,28 @@ package sqlc
 
 import (
 	"context"
+	"time"
 )
+
+const addSession = `-- name: AddSession :exec
+INSERT INTO sessions (
+    id, user_name, expire
+)
+VALUES (
+    ?, ?, ?
+)
+`
+
+type AddSessionParams struct {
+	ID       string
+	UserName string
+	Expire   time.Time
+}
+
+func (q *Queries) AddSession(ctx context.Context, arg AddSessionParams) error {
+	_, err := q.db.ExecContext(ctx, addSession, arg.ID, arg.UserName, arg.Expire)
+	return err
+}
 
 const addVisited = `-- name: AddVisited :one
 INSERT INTO visited (
@@ -197,6 +218,16 @@ func (q *Queries) DeleteLink(ctx context.Context, arg DeleteLinkParams) error {
 	return err
 }
 
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions
+WHERE id = ?
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, id)
+	return err
+}
+
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users
 WHERE name = ?
@@ -330,6 +361,18 @@ func (q *Queries) GetLinks(ctx context.Context, wishID int64) ([]Link, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getSession = `-- name: GetSession :one
+SELECT id, user_name, expire FROM sessions
+WHERE id = ?
+`
+
+func (q *Queries) GetSession(ctx context.Context, id string) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getSession, id)
+	var i Session
+	err := row.Scan(&i.ID, &i.UserName, &i.Expire)
+	return i, err
 }
 
 const getUser = `-- name: GetUser :one
