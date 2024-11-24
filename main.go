@@ -683,6 +683,8 @@ func allHandler(w http.ResponseWriter, r *http.Request) {
 		// Wishlists set to 'Secret' can not be accessed externally!
 		if wishlist.Access != AccessSecret || user == wlUser {
 
+			fmt.Println("load wishlist")
+
 			sortedList := maps.Values(wishlist.Wishes)
 			sort.Slice(sortedList, func(i, j int) bool { return sortedList[i].OrderIndex < sortedList[j].OrderIndex })
 
