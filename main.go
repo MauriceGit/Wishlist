@@ -541,6 +541,7 @@ func createNewUser(user, password string) {
 	users[user] = userdata{
 		passwordHash: hashPassword(user, password),
 		Wishlists:    make(map[string]Wishlist),
+		Visited:      make(map[string]time.Time),
 	}
 	params := sqlc.CreateUserParams{Name: user, Passwordhash: users[user].passwordHash}
 	if err := dbQueries.CreateUser(ctx, params); err != nil {
