@@ -491,11 +491,9 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 		dbActive = 1
 	}
 
-	imageUrl := wish.ImageUrl
-	if imageUrl == "" {
-		fmt.Println("Try to extract image url")
-		imageUrl, _ = extractImageUrlFromLinks(links)
-		fmt.Printf("New image url: '%v'\n", imageUrl)
+	if wish.ImageUrl == "" {
+		imageUrl, _ := extractImageUrlFromLinks(links)
+		wish.ImageUrl = imageUrl
 	}
 
 	// Insert with into db if it is a new wish
@@ -504,7 +502,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 			WishlistUuid: uuid,
 			Name:         wish.Name,
 			Description:  wish.Description,
-			ImageUrl:     imageUrl,
+			ImageUrl:     wish.ImageUrl,
 			Reserved:     dbReserved,
 			Active:       dbActive, OrderIndex: wish.OrderIndex,
 		}
@@ -518,7 +516,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 		params := sqlc.UpdateWishParams{
 			Name:        wish.Name,
 			Description: wish.Description,
-			ImageUrl:    imageUrl,
+			ImageUrl:    wish.ImageUrl,
 			Reserved:    dbReserved,
 			Active:      dbActive,
 			OrderIndex:  wish.OrderIndex,
