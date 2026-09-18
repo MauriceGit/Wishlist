@@ -493,7 +493,9 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 
 	imageUrl := wish.ImageUrl
 	if imageUrl == "" {
+		fmt.Println("Try to extract image url")
 		imageUrl, _ = extractImageUrlFromLinks(links)
+		fmt.Printf("New image url: '%v'\n", imageUrl)
 	}
 
 	// Insert with into db if it is a new wish
