@@ -1,8 +1,6 @@
 module wishlist
 
-go 1.22.0
-
-toolchain go1.22.7
+go 1.24
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.24
@@ -10,6 +8,7 @@ require (
 )
 
 require (
+	github.com/otiai10/opengraph/v2 v2.2.0 // indirect
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/text v0.19.0 // indirect

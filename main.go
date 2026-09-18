@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"wishlist/sqlc"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/otiai10/opengraph/v2"
 	"golang.org/x/crypto/acme/autocert"
 
 	// Use the regular slices.Collect(maps.Values()) as soon as go version 1.23 is supported by liteIDE!
@@ -422,6 +424,58 @@ func reserveWish(uuid string, id, reserved int64) {
 	}
 }
 
+// extractImageUrl takes the product url and extracts the relevant image-url from it.
+// This works well for smaller shops. Otto and Amazon do not work unfortunately...
+func extractImageUrl(url string) (string, error) {
+	ogp, err := opengraph.Fetch(url)
+	if err != nil {
+		return "", fmt.Errorf("error fetching page")
+	}
+
+	ogp.ToAbs()
+
+	if len(ogp.Image) == 0 {
+
+		if strings.Contains(url, "amazon.") {
+			fmt.Println("Try amazon specific path...")
+			resp, err := http.Get(url)
+			if err != nil {
+				return "", err
+			}
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return "", err
+			}
+
+			fmt.Println(string(body))
+		}
+
+		if strings.Contains(url, "otto.de") {
+
+		}
+
+		return "", fmt.Errorf("no og:image found")
+
+	}
+
+	imageURL := ogp.Image[0].URL
+	return imageURL, nil
+}
+
+// extractImageUrlFromLinks goes through all available links and returns the first valid image url it finds.
+func extractImageUrlFromLinks(links []string) (string, error) {
+	for _, l := range links {
+		if l != "" {
+			if imgUrl, err := extractImageUrl(l); err == nil {
+				return imgUrl, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no valid image url found")
+}
+
 // addWish receives a partially filled Wish. Links are set to nil as they should be inserted into the database before
 // adding them into the wish (to get the link id from the db)
 // It returns the id of the newly created wish and an error if one occured.
@@ -437,13 +491,18 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 		dbActive = 1
 	}
 
+	imageUrl := wish.ImageUrl
+	if imageUrl == "" {
+		imageUrl, _ = extractImageUrlFromLinks(links)
+	}
+
 	// Insert with into db if it is a new wish
 	if wishId == -1 {
 		params := sqlc.CreateWishParams{
 			WishlistUuid: uuid,
 			Name:         wish.Name,
 			Description:  wish.Description,
-			ImageUrl:     wish.ImageUrl,
+			ImageUrl:     imageUrl,
 			Reserved:     dbReserved,
 			Active:       dbActive, OrderIndex: wish.OrderIndex,
 		}
@@ -457,7 +516,7 @@ func addWish(uuid string, wish Wish, wishId int64, links []string) (int64, error
 		params := sqlc.UpdateWishParams{
 			Name:        wish.Name,
 			Description: wish.Description,
-			ImageUrl:    wish.ImageUrl,
+			ImageUrl:    imageUrl,
 			Reserved:    dbReserved,
 			Active:      dbActive,
 			OrderIndex:  wish.OrderIndex,
